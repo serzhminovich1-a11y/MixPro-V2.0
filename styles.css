@@ -1,0 +1,257 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * MixPro — Obsidian command center.
+ * Near-black surfaces, emerald/mint neon primary, technical mono for data readouts.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-mint: var(--mint);
+  --color-violet: var(--violet);
+  --color-cyan: var(--cyan);
+  --color-panel: var(--panel);
+  --color-panel-deep: var(--panel-deep);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-display: "Space Grotesk", sans-serif;
+  --font-sans: "DM Sans", "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+:root {
+  --radius: 0.25rem;
+  /* FL Studio-inspired greys: workspace mid-grey, deeper panels, hairline borders */
+  --background: oklch(0.32 0.003 270);
+  --foreground: oklch(0.92 0.003 270);
+  --panel: oklch(0.26 0.003 270);
+  --panel-deep: oklch(0.19 0.003 270);
+  --card: oklch(0.26 0.003 270);
+  --card-foreground: oklch(0.92 0.003 270);
+  --popover: oklch(0.22 0.003 270);
+  --popover-foreground: oklch(0.92 0.003 270);
+  /* FL green primary */
+  --primary: oklch(0.78 0.19 145);
+  --primary-foreground: oklch(0.15 0.05 145);
+  --secondary: oklch(0.29 0.003 270);
+  --secondary-foreground: oklch(0.92 0.003 270);
+  --muted: oklch(0.27 0.003 270);
+  --muted-foreground: oklch(0.66 0.005 270);
+  --accent: oklch(0.78 0.19 145);
+  --accent-foreground: oklch(0.15 0.05 145);
+  --destructive: oklch(0.62 0.22 25);
+  --destructive-foreground: oklch(0.97 0.01 25);
+  --border: oklch(0 0 0 / 55%);
+  --input: oklch(0 0 0 / 45%);
+  --ring: oklch(0.78 0.19 145);
+  --mint: oklch(0.78 0.19 145);
+  --violet: oklch(0.72 0.15 295);
+  --cyan: oklch(0.85 0.1 205);
+  --chart-1: oklch(0.78 0.19 145);
+  --chart-2: oklch(0.75 0.15 80);
+  --chart-3: oklch(0.72 0.14 220);
+  --chart-4: oklch(0.72 0.15 295);
+  --chart-5: oklch(0.7 0.2 25);
+  --sidebar: oklch(0.22 0.003 270);
+  --sidebar-foreground: oklch(0.92 0.003 270);
+  --sidebar-primary: oklch(0.78 0.19 145);
+  --sidebar-primary-foreground: oklch(0.15 0.05 145);
+  --sidebar-accent: oklch(0.29 0.003 270);
+  --sidebar-accent-foreground: oklch(0.92 0.003 270);
+  --sidebar-border: oklch(0 0 0 / 55%);
+  --sidebar-ring: oklch(0.78 0.19 145);
+  --gradient-aurora: none;
+  --gradient-neon: linear-gradient(90deg, var(--mint), var(--cyan));
+  --gradient-emerald: linear-gradient(90deg, oklch(0.58 0.15 145), var(--mint));
+  --shadow-glow-mint: 0 0 12px -2px oklch(0.78 0.19 145 / 55%);
+  --shadow-glow-violet: 0 0 12px -2px oklch(0.72 0.15 295 / 45%);
+  --shadow-panel: inset 0 1px 0 oklch(1 0 0 / 6%), inset 0 -1px 0 oklch(0 0 0 / 45%),
+    0 1px 0 oklch(0 0 0 / 55%);
+}
+
+.dark {
+  --background: oklch(0.32 0.003 270);
+  --foreground: oklch(0.92 0.003 270);
+}
+
+/* FL-style panel: flat grey, hairline black border, subtle top-highlight bevel */
+@utility panel {
+  background: var(--panel);
+  border: 1px solid oklch(0 0 0 / 55%);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Legacy alias — used all over the app, now maps to the FL panel */
+@utility glass {
+  background: var(--panel);
+  border: 1px solid oklch(0 0 0 / 55%);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+}
+
+@utility panel-deep {
+  background: var(--panel-deep);
+  border: 1px solid oklch(0 0 0 / 55%);
+  border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 4%);
+}
+
+@utility text-gradient-neon {
+  color: var(--mint);
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+}
+
+@utility text-gradient-emerald {
+  color: var(--mint);
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+}
+
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
+/* FL Studio-style button: flat green, tight radius, crisp bevel */
+@utility btn-primary {
+  background: linear-gradient(180deg, oklch(0.82 0.19 145), oklch(0.7 0.18 145));
+  color: var(--primary-foreground);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 0.25rem;
+  border: 1px solid oklch(0 0 0 / 55%);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 30%), inset 0 -1px 0 oklch(0 0 0 / 35%);
+  transition: filter 120ms ease, transform 80ms ease;
+}
+@utility btn-primary {
+  &:hover { filter: brightness(1.08); }
+  &:active { transform: translateY(1px); filter: brightness(0.95); }
+}
+
+@utility btn-ghost {
+  background: linear-gradient(180deg, oklch(0.32 0.003 270), oklch(0.24 0.003 270));
+  border: 1px solid oklch(0 0 0 / 55%);
+  color: var(--foreground);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 0.25rem;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 8%), inset 0 -1px 0 oklch(0 0 0 / 35%);
+  transition: filter 120ms ease, transform 80ms ease;
+}
+@utility btn-ghost {
+  &:hover { filter: brightness(1.15); color: var(--mint); }
+  &:active { transform: translateY(1px); }
+}
+
+@utility ping-dot {
+  position: relative;
+  display: inline-flex;
+  width: 0.5rem;
+  height: 0.5rem;
+}
+@utility ping-dot {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background: var(--mint);
+    opacity: 0.5;
+    animation: mp-ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  &::after {
+    content: "";
+    position: relative;
+    display: inline-flex;
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    background: var(--mint);
+    box-shadow: 0 0 8px oklch(0.82 0.19 155 / 60%);
+  }
+}
+
+@keyframes mp-ping {
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    background-image:
+      linear-gradient(oklch(0 0 0 / 12%) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(0 0 0 / 12%) 1px, transparent 1px);
+    background-size: 24px 24px, 24px 24px;
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+}

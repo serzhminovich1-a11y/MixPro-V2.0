@@ -1,0 +1,280 @@
+import { useEffect, useState } from "react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import {
+  ChevronRight,
+  ChevronDown,
+  Folder,
+  FolderOpen,
+  Trophy,
+  AudioWaveform,
+  Volume2,
+  GraduationCap,
+  SlidersHorizontal,
+  MessagesSquare,
+  User as UserIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Radio,
+  Shield,
+  Users,
+  BookOpen,
+  Library,
+  Waves,
+  ShieldAlert,
+  Bell,
+  Crown,
+} from "lucide-react";
+import { useAdmin } from "@/hooks/use-admin";
+
+type Leaf = { label: string; to: string; hash?: string; icon: React.ComponentType<{ className?: string }>; badge?: string };
+type Group = {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  items: Leaf[];
+  adminOnly?: boolean;
+  superOnly?: boolean;
+  tone?: "admin" | "super";
+};
+
+const groups: Group[] = [
+  {
+    label: "Admin · Studio",
+    icon: Folder,
+    adminOnly: true,
+    tone: "admin",
+    items: [
+      { label: "Пользователи", to: "/admin", icon: Users, badge: "ADM" },
+      { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "ADM" },
+      { label: "Глоссарий", to: "/admin/glossary", icon: Library, badge: "ADM" },
+      { label: "Библиотека лупов", to: "/admin/loops", icon: Waves, badge: "ADM" },
+      { label: "Модерация", to: "/moderation", icon: ShieldAlert, badge: "ADM" },
+    ],
+  },
+  {
+    label: "Super · System",
+    icon: Folder,
+    superOnly: true,
+    tone: "super",
+    items: [
+      { label: "Опции системы", to: "/admin/options", icon: SlidersHorizontal, badge: "SU" },
+      { label: "Роли и права", to: "/admin", hash: "roles", icon: Shield, badge: "SU" },
+      { label: "Подписки", to: "/admin", hash: "subs", icon: Crown, badge: "SU" },
+    ],
+  },
+];
+
+const SIDEBAR_COLLAPSED_KEY = "mixpro:sidebar-collapsed";
+const SIDEBAR_GROUPS_KEY = "mixpro:sidebar-groups";
+
+function readCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsed(value: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, value ? "1" : "0");
+  } catch (e) {
+    console.error("[sidebar] failed to save collapsed state", e);
+  }
+}
+
+function readGroupState(): Record<string, boolean> {
+  if (typeof window === "undefined") {
+    return Object.fromEntries(groups.map((g) => [g.label, true]));
+  }
+  try {
+    const raw = window.localStorage.getItem(SIDEBAR_GROUPS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    return Object.fromEntries(
+      groups.map((g) => [g.label, parsed[g.label] ?? true]),
+    );
+  } catch {
+    return Object.fromEntries(groups.map((g) => [g.label, true]));
+  }
+}
+
+function writeGroupState(value: Record<string, boolean>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SIDEBAR_GROUPS_KEY, JSON.stringify(value));
+  } catch (e) {
+    console.error("[sidebar] failed to save group state", e);
+  }
+}
+
+export function AppSidebar() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { isAdmin, isSuperAdmin, ready } = useAdmin();
+  const [collapsed, setCollapsed] = useState<boolean>(() => readCollapsed());
+  const [open, setOpen] = useState<Record<string, boolean>>(() => readGroupState());
+
+  useEffect(() => {
+    writeCollapsed(collapsed);
+  }, [collapsed]);
+
+  useEffect(() => {
+    writeGroupState(open);
+  }, [open]);
+
+  useEffect(() => {
+    const onToggle = () => setCollapsed((c) => !c);
+    window.addEventListener("mixpro:toggle-sidebar", onToggle);
+    return () => window.removeEventListener("mixpro:toggle-sidebar", onToggle);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      setCollapsed(readCollapsed());
+      setOpen(readGroupState());
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
+
+  const visible = groups.filter((g) => {
+    if (g.superOnly) return ready && isSuperAdmin;
+    if (g.adminOnly) return ready && isAdmin;
+    return true;
+  });
+
+  // Sidebar is an admin-only control surface. Hide for everyone else.
+  if (!ready || (!isAdmin && !isSuperAdmin) || visible.length === 0) return null;
+
+
+  if (collapsed) {
+    return (
+      <aside className="sb-shell sticky top-[76px] hidden h-[calc(100vh-76px)] w-8 shrink-0 flex-col items-center py-2 md:flex">
+        <button
+          onClick={() => setCollapsed(false)}
+          className="sb-chip grid h-6 w-6 place-items-center rounded-sm"
+          title="Показать браузер"
+        >
+          <PanelLeftOpen className="h-3 w-3" />
+        </button>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="sb-shell sticky top-[76px] hidden h-[calc(100vh-76px)] w-56 shrink-0 flex-col md:flex">
+      {/* header */}
+      <div className="sb-header flex h-7 items-center justify-between px-2">
+        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] opacity-70">
+          Browser
+        </span>
+        <button
+          onClick={() => setCollapsed(true)}
+          className="sb-chip grid h-5 w-5 place-items-center rounded-sm"
+          title="Скрыть"
+        >
+          <PanelLeftClose className="h-3 w-3" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto py-1 text-[11px]">
+        {visible.map((g) => {
+          const isOpen = open[g.label];
+          const Icon = isOpen ? FolderOpen : g.icon;
+          const toneLabel =
+            g.tone === "super"
+              ? "text-yellow-300"
+              : g.tone === "admin"
+                ? "text-mint"
+                : "";
+          const toneIcon =
+            g.tone === "super"
+              ? "text-yellow-300 drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]"
+              : g.tone === "admin"
+                ? "text-mint drop-shadow-[0_0_4px_var(--mint)]"
+                : "";
+          return (
+            <div key={g.label} className="mb-0.5">
+              <button
+                onClick={() => setOpen((s) => ({ ...s, [g.label]: !s[g.label] }))}
+                className="sb-group flex w-full items-center gap-1 px-1.5 py-[3px] text-left"
+              >
+                {isOpen ? (
+                  <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+                ) : (
+                  <ChevronRight className="h-3 w-3 shrink-0 opacity-70" />
+                )}
+                <Icon className={`sb-folder-icon h-3.5 w-3.5 shrink-0 ${toneIcon}`} />
+                <span className={`truncate text-[11px] font-semibold ${toneLabel}`}>
+                  {g.label}
+                </span>
+                {g.tone === "super" && (
+                  <Crown className="ml-auto h-3 w-3 shrink-0 text-yellow-300 opacity-90" />
+                )}
+                {g.tone === "admin" && (
+                  <Shield className="ml-auto h-3 w-3 shrink-0 text-mint opacity-90" />
+                )}
+              </button>
+              {isOpen && (
+                <div>
+                  {g.items.map((leaf) => {
+                    const active =
+                      pathname === leaf.to &&
+                      (!leaf.hash || (typeof window !== "undefined" && window.location.hash === `#${leaf.hash}`));
+                    return (
+                      <Link
+                        key={`${g.label}:${leaf.to}:${leaf.label}`}
+                        to={leaf.to}
+                        hash={leaf.hash}
+                        className={`sb-item flex items-center gap-1.5 py-[3px] pl-7 pr-2 text-[11px] transition-colors ${active ? "is-active" : ""}`}
+                      >
+                        <leaf.icon className="h-3 w-3 shrink-0 opacity-80" />
+                        <span className="truncate">{leaf.label}</span>
+                        {leaf.badge && (
+                          <span
+                            className={`ml-auto rounded-sm border px-1 py-[1px] font-mono text-[8px] tracking-wider ${
+                              leaf.badge === "SU"
+                                ? "border-yellow-300/50 bg-yellow-300/10 text-yellow-300"
+                                : "border-mint/50 bg-mint/10 text-mint"
+                            }`}
+                          >
+                            {leaf.badge}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* footer status */}
+      <div className="sb-footer px-2 py-1 font-mono text-[9px] uppercase tracking-wider">
+        <div className="flex items-center justify-between">
+          <span>MixPro v1.0</span>
+          <span className="flex items-center gap-1">
+            {isSuperAdmin ? (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-yellow-300 shadow-[0_0_5px_rgba(250,204,21,0.8)]" />
+                SUPER
+              </>
+            ) : isAdmin ? (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-mint shadow-[0_0_5px_var(--mint)]" />
+                ADMIN
+              </>
+            ) : (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-mint shadow-[0_0_5px_var(--mint)]" />
+                READY
+              </>
+            )}
+          </span>
+        </div>
+      </div>
+    </aside>
+  );
+}
