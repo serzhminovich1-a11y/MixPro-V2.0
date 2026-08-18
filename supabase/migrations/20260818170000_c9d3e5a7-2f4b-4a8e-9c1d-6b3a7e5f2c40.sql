@@ -9,3 +9,10 @@
 -- run on the plain authenticated client.
 GRANT INSERT, UPDATE, DELETE ON public.course_modules TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON public.lessons TO authenticated;
+
+-- Same bug, glossary_terms: "mods manage terms" is FOR ALL but the base
+-- grant was only ever SELECT. This is what was actually behind the
+-- glossary "Missing SUPABASE_SERVICE_ROLE_KEY" error — the image upload
+-- itself was already fixed (lesson-assets storage), but saving the term
+-- afterwards (upsertGlossaryTerm) still hit the same missing-grant wall.
+GRANT INSERT, UPDATE, DELETE ON public.glossary_terms TO authenticated;

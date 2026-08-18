@@ -53,11 +53,14 @@ export const upsertGlossaryTerm = createServerFn({ method: "POST" })
     const { data: roles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
     const has = (roles ?? []).some((r: any) => ["admin", "super_admin", "moderator"].includes(r.role));
     if (!has) throw new Error("Только для модераторов и админов");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // "mods manage terms" RLS already covers this (FOR ALL, can_moderate())
+    // — the base GRANT on glossary_terms was just never widened past
+    // SELECT, same shape of bug fixed elsewhere tonight (see
+    // 20260818170000). No service-role client needed.
     const payload: any = { ...data, created_by: context.userId };
     const { data: out, error } = data.id
-      ? await (supabaseAdmin as any).from("glossary_terms").update(payload).eq("id", data.id).select().maybeSingle()
-      : await (supabaseAdmin as any).from("glossary_terms").insert(payload).select().maybeSingle();
+      ? await (context.supabase as any).from("glossary_terms").update(payload).eq("id", data.id).select().maybeSingle()
+      : await (context.supabase as any).from("glossary_terms").insert(payload).select().maybeSingle();
     if (error) throw new Error(error.message);
     return { term: out };
   });
@@ -69,8 +72,7 @@ export const deleteGlossaryTerm = createServerFn({ method: "POST" })
     const { data: roles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
     const has = (roles ?? []).some((r: any) => ["admin", "super_admin", "moderator"].includes(r.role));
     if (!has) throw new Error("Только для модераторов и админов");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await (supabaseAdmin as any).from("glossary_terms").delete().eq("id", data.id);
+    const { error } = await (context.supabase as any).from("glossary_terms").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
