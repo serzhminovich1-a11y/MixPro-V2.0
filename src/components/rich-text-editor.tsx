@@ -86,6 +86,17 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The contentEditable div only exists in the DOM while !sourceMode (see
+  // the render below) — so at the moment toggleSource() flips sourceMode
+  // back to false, ref.current is still null (the div hasn't remounted
+  // yet) and a direct write there is a no-op, leaving the editor visibly
+  // blank even though the parent's `value` is correct. Do the write here
+  // instead, once the div actually exists again.
+  useEffect(() => {
+    if (!sourceMode && ref.current) ref.current.innerHTML = sourceValue;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceMode]);
+
   useEffect(() => {
     function poll() {
       if (!ref.current) return;
@@ -207,8 +218,7 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
       setSourceMode(true);
     } else {
       onChange(sourceValue);
-      if (ref.current) ref.current.innerHTML = sourceValue;
-      setSourceMode(false);
+      setSourceMode(false); // effect above re-syncs ref.current once the div remounts
     }
   }
 
