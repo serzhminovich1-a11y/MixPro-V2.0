@@ -197,13 +197,17 @@ export function startSource(kind: SourceKind): StartedSource {
     const proxy = ac.createGain(); proxy.gain.value = 1;
     const bs = ac.createBufferSource();
     let started = false;
+    let cancelled = false;
     decodeLoop(loop).then((buf) => {
+      if (cancelled) return;
       bs.buffer = buf; bs.loop = true;
       bs.connect(proxy);
       try { bs.start(); started = true; } catch { /* */ }
     }).catch(() => {
+      if (cancelled) return;
       // Decode failed — fall back to procedural drums into the same proxy.
       getDrums(ac).then((buf) => {
+        if (cancelled) return;
         bs.buffer = buf; bs.loop = true;
         bs.connect(proxy);
         try { bs.start(); started = true; } catch { /* */ }
@@ -211,7 +215,7 @@ export function startSource(kind: SourceKind): StartedSource {
     });
     return {
       node: proxy as AudioNode,
-      stop() { if (started) { try { bs.stop(); } catch { /* */ } } },
+      stop() { cancelled = true; if (started) { try { bs.stop(); } catch { /* */ } } },
     };
   }
 
@@ -236,6 +240,8 @@ export function startSource(kind: SourceKind): StartedSource {
   const proxy = ac.createGain(); proxy.gain.value = 1;
   const bs = ac.createBufferSource();
   let padHandle: { node: AudioNode; stop(): void } | null = null;
+  let drumsStarted = false;
+  let drumsCancelled = false;
   if (kind === "mix") {
     padHandle = makePad(ac);
     const padGain = ac.createGain(); padGain.gain.value = 0.6;
@@ -243,13 +249,18 @@ export function startSource(kind: SourceKind): StartedSource {
     padGain.connect(proxy);
   }
   getDrums(ac).then((buf) => {
+    if (drumsCancelled) return;
     bs.buffer = buf; bs.loop = true;
     bs.connect(proxy);
-    try { bs.start(); } catch { /* */ }
+    try { bs.start(); drumsStarted = true; } catch { /* */ }
   });
   return {
     node: proxy as AudioNode,
-    stop() { try { bs.stop(); } catch { /* */ } padHandle?.stop(); },
+    stop() {
+      drumsCancelled = true;
+      if (drumsStarted) { try { bs.stop(); } catch { /* */ } }
+      padHandle?.stop();
+    },
   };
 }
 

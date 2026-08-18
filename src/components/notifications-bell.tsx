@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Bell, AtSign, Play, CheckCheck } from "lucide-react";
+import { Bell, AtSign, MessagesSquare, Play, CheckCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { fetchNotifications, type NotificationRow } from "@/routes/_authenticated/notifications";
@@ -72,6 +72,8 @@ export function NotificationsBell() {
         params: { postId: n.post_id },
         search: { track: n.track_index ?? 0, t: n.timestamp_ms ?? 0 },
       } as never);
+    } else if (n.type === "forum_reply" && n.thread_id) {
+      navigate({ to: "/forum/thread/$id", params: { id: n.thread_id } });
     }
   }
 
@@ -121,6 +123,7 @@ export function NotificationsBell() {
                 {rows.map((n) => {
                   const stamp = fmtMs(n.timestamp_ms);
                   const isMention = n.type === "mention_track_comment";
+                  const isForumReply = n.type === "forum_reply";
                   return (
                     <li key={n.id}>
                       <button
@@ -139,6 +142,7 @@ export function NotificationsBell() {
                           <div className="flex items-center gap-1 text-[11px]">
                             <span className="truncate font-semibold">@{n.actor?.username ?? "?"}</span>
                             {isMention && <AtSign className="h-2.5 w-2.5 text-violet-300" />}
+                            {isForumReply && <MessagesSquare className="h-2.5 w-2.5 text-cyan-300" />}
                             {stamp && (
                               <span className="inline-flex items-center gap-0.5 rounded bg-mint/15 px-1 font-mono text-[9px] text-mint">
                                 <Play className="h-2 w-2 fill-current" />

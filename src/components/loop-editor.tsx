@@ -25,6 +25,7 @@ export function LoopEditor({ loop, onClose, onUpdated }: Props) {
   const [title, setTitle] = useState(loop.title);
   const [buffer, setBuffer] = useState<AudioBuffer | null>(null);
   const [peaks, setPeaks] = useState<Float32Array | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [startSec, setStartSec] = useState(0);
   const [endSec, setEndSec] = useState(0);
@@ -40,11 +41,17 @@ export function LoopEditor({ loop, onClose, onUpdated }: Props) {
   // Load & decode audio
   useEffect(() => {
     let alive = true;
+    setLoadError(null);
     (async () => {
       const { data, error } = await supabase.storage
         .from("game-loops")
         .createSignedUrl(loop.storage_path, 60 * 30);
-      if (error || !data?.signedUrl) { toast.error("Не удалось загрузить луп"); return; }
+      if (error || !data?.signedUrl) {
+        if (!alive) return;
+        toast.error("Не удалось загрузить луп");
+        setLoadError(error?.message ?? "Файл недоступен в хранилище");
+        return;
+      }
       if (!alive) return;
       setSignedUrl(data.signedUrl);
       try {
@@ -62,6 +69,7 @@ export function LoopEditor({ loop, onClose, onUpdated }: Props) {
       } catch (e) {
         console.error(e);
         toast.error("Ошибка декодирования аудио");
+        if (alive) setLoadError("Не удалось декодировать аудио");
       }
     })();
     return () => { alive = false; };
@@ -243,7 +251,12 @@ export function LoopEditor({ loop, onClose, onUpdated }: Props) {
 
         {/* Waveform */}
         <div className="rounded-md border border-border bg-background p-2">
-          {!peaks ? (
+          {loadError ? (
+            <div className="grid h-[160px] place-items-center gap-1 text-center text-xs text-muted-foreground">
+              <span>Не удалось загрузить луп</span>
+              <span className="text-[10px] opacity-70">{loadError}</span>
+            </div>
+          ) : !peaks ? (
             <div className="grid h-[160px] place-items-center text-xs text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Декодирую…
             </div>

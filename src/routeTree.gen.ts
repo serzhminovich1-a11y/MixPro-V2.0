@@ -47,9 +47,11 @@ import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/c
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as ForumThreadIdRouteImport } from './routes/forum.thread.$id'
 import { Route as AuthenticatedPostPostIdRouteImport } from './routes/_authenticated/post.$postId'
-import { Route as AuthenticatedAdminOptionsRouteImport } from './routes/_authenticated/admin.options'
 import { Route as AuthenticatedAdminLoopsRouteImport } from './routes/_authenticated/admin.loops'
+import { Route as AuthenticatedAdminLogRouteImport } from './routes/_authenticated/admin.log'
 import { Route as AuthenticatedAdminGlossaryRouteImport } from './routes/_authenticated/admin.glossary'
+import { Route as AuthenticatedAdminForumRouteImport } from './routes/_authenticated/admin.forum'
+import { Route as AuthenticatedAdminDashboardRouteImport } from './routes/_authenticated/admin.dashboard'
 import { Route as AuthenticatedAdminCoursesRouteImport } from './routes/_authenticated/admin.courses'
 
 const PresetsRoute = PresetsRouteImport.update({
@@ -242,21 +244,31 @@ const AuthenticatedPostPostIdRoute = AuthenticatedPostPostIdRouteImport.update({
   path: '/post/$postId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedAdminOptionsRoute =
-  AuthenticatedAdminOptionsRouteImport.update({
-    id: '/admin/options',
-    path: '/admin/options',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedAdminLoopsRoute = AuthenticatedAdminLoopsRouteImport.update({
   id: '/admin/loops',
   path: '/admin/loops',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminLogRoute = AuthenticatedAdminLogRouteImport.update({
+  id: '/admin/log',
+  path: '/admin/log',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAdminGlossaryRoute =
   AuthenticatedAdminGlossaryRouteImport.update({
     id: '/admin/glossary',
     path: '/admin/glossary',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminForumRoute = AuthenticatedAdminForumRouteImport.update({
+  id: '/admin/forum',
+  path: '/admin/forum',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminDashboardRoute =
+  AuthenticatedAdminDashboardRouteImport.update({
+    id: '/admin/dashboard',
+    path: '/admin/dashboard',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedAdminCoursesRoute =
@@ -302,9 +314,11 @@ export interface FileRoutesByFullPath {
   '/games/': typeof GamesIndexRoute
   '/learn/': typeof LearnIndexRoute
   '/admin/courses': typeof AuthenticatedAdminCoursesRoute
+  '/admin/dashboard': typeof AuthenticatedAdminDashboardRoute
+  '/admin/forum': typeof AuthenticatedAdminForumRoute
   '/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
+  '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
-  '/admin/options': typeof AuthenticatedAdminOptionsRoute
   '/post/$postId': typeof AuthenticatedPostPostIdRoute
   '/forum/thread/$id': typeof ForumThreadIdRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
@@ -345,9 +359,11 @@ export interface FileRoutesByTo {
   '/games': typeof GamesIndexRoute
   '/learn': typeof LearnIndexRoute
   '/admin/courses': typeof AuthenticatedAdminCoursesRoute
+  '/admin/dashboard': typeof AuthenticatedAdminDashboardRoute
+  '/admin/forum': typeof AuthenticatedAdminForumRoute
   '/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
+  '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
-  '/admin/options': typeof AuthenticatedAdminOptionsRoute
   '/post/$postId': typeof AuthenticatedPostPostIdRoute
   '/forum/thread/$id': typeof ForumThreadIdRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
@@ -390,9 +406,11 @@ export interface FileRoutesById {
   '/games/': typeof GamesIndexRoute
   '/learn/': typeof LearnIndexRoute
   '/_authenticated/admin/courses': typeof AuthenticatedAdminCoursesRoute
+  '/_authenticated/admin/dashboard': typeof AuthenticatedAdminDashboardRoute
+  '/_authenticated/admin/forum': typeof AuthenticatedAdminForumRoute
   '/_authenticated/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
+  '/_authenticated/admin/log': typeof AuthenticatedAdminLogRoute
   '/_authenticated/admin/loops': typeof AuthenticatedAdminLoopsRoute
-  '/_authenticated/admin/options': typeof AuthenticatedAdminOptionsRoute
   '/_authenticated/post/$postId': typeof AuthenticatedPostPostIdRoute
   '/forum/thread/$id': typeof ForumThreadIdRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
@@ -435,9 +453,11 @@ export interface FileRouteTypes {
     | '/games/'
     | '/learn/'
     | '/admin/courses'
+    | '/admin/dashboard'
+    | '/admin/forum'
     | '/admin/glossary'
+    | '/admin/log'
     | '/admin/loops'
-    | '/admin/options'
     | '/post/$postId'
     | '/forum/thread/$id'
     | '/admin/'
@@ -478,9 +498,11 @@ export interface FileRouteTypes {
     | '/games'
     | '/learn'
     | '/admin/courses'
+    | '/admin/dashboard'
+    | '/admin/forum'
     | '/admin/glossary'
+    | '/admin/log'
     | '/admin/loops'
-    | '/admin/options'
     | '/post/$postId'
     | '/forum/thread/$id'
     | '/admin'
@@ -522,9 +544,11 @@ export interface FileRouteTypes {
     | '/games/'
     | '/learn/'
     | '/_authenticated/admin/courses'
+    | '/_authenticated/admin/dashboard'
+    | '/_authenticated/admin/forum'
     | '/_authenticated/admin/glossary'
+    | '/_authenticated/admin/log'
     | '/_authenticated/admin/loops'
-    | '/_authenticated/admin/options'
     | '/_authenticated/post/$postId'
     | '/forum/thread/$id'
     | '/_authenticated/admin/'
@@ -832,13 +856,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPostPostIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/admin/options': {
-      id: '/_authenticated/admin/options'
-      path: '/admin/options'
-      fullPath: '/admin/options'
-      preLoaderRoute: typeof AuthenticatedAdminOptionsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/admin/loops': {
       id: '/_authenticated/admin/loops'
       path: '/admin/loops'
@@ -846,11 +863,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminLoopsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/log': {
+      id: '/_authenticated/admin/log'
+      path: '/admin/log'
+      fullPath: '/admin/log'
+      preLoaderRoute: typeof AuthenticatedAdminLogRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/glossary': {
       id: '/_authenticated/admin/glossary'
       path: '/admin/glossary'
       fullPath: '/admin/glossary'
       preLoaderRoute: typeof AuthenticatedAdminGlossaryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/forum': {
+      id: '/_authenticated/admin/forum'
+      path: '/admin/forum'
+      fullPath: '/admin/forum'
+      preLoaderRoute: typeof AuthenticatedAdminForumRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/dashboard': {
+      id: '/_authenticated/admin/dashboard'
+      path: '/admin/dashboard'
+      fullPath: '/admin/dashboard'
+      preLoaderRoute: typeof AuthenticatedAdminDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin/courses': {
@@ -869,9 +907,11 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedAdminCoursesRoute: typeof AuthenticatedAdminCoursesRoute
+  AuthenticatedAdminDashboardRoute: typeof AuthenticatedAdminDashboardRoute
+  AuthenticatedAdminForumRoute: typeof AuthenticatedAdminForumRoute
   AuthenticatedAdminGlossaryRoute: typeof AuthenticatedAdminGlossaryRoute
+  AuthenticatedAdminLogRoute: typeof AuthenticatedAdminLogRoute
   AuthenticatedAdminLoopsRoute: typeof AuthenticatedAdminLoopsRoute
-  AuthenticatedAdminOptionsRoute: typeof AuthenticatedAdminOptionsRoute
   AuthenticatedPostPostIdRoute: typeof AuthenticatedPostPostIdRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
@@ -882,9 +922,11 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedAdminCoursesRoute: AuthenticatedAdminCoursesRoute,
+  AuthenticatedAdminDashboardRoute: AuthenticatedAdminDashboardRoute,
+  AuthenticatedAdminForumRoute: AuthenticatedAdminForumRoute,
   AuthenticatedAdminGlossaryRoute: AuthenticatedAdminGlossaryRoute,
+  AuthenticatedAdminLogRoute: AuthenticatedAdminLogRoute,
   AuthenticatedAdminLoopsRoute: AuthenticatedAdminLoopsRoute,
-  AuthenticatedAdminOptionsRoute: AuthenticatedAdminOptionsRoute,
   AuthenticatedPostPostIdRoute: AuthenticatedPostPostIdRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
 }
@@ -939,3 +981,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

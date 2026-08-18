@@ -241,7 +241,11 @@ export const TrackPlayer = forwardRef<TrackPlayerHandle, Props>(function TrackPl
       audioCtxRef.current?.resume().catch(() => {});
     };
     a.addEventListener("play", onPlay);
-    return () => { a.removeEventListener("play", onPlay); };
+    return () => {
+      a.removeEventListener("play", onPlay);
+      audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
+    };
   }, []);
 
   // Apply channel routing when mode or graph changes

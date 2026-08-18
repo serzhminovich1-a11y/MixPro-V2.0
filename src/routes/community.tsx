@@ -5,6 +5,7 @@ import { MessagesSquare, Heart, Send } from "lucide-react";
 import { getPosts } from "@/lib/public.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { ReportButton } from "@/components/report-button";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
 const postsQuery = queryOptions({ queryKey: ["posts"], queryFn: () => getPosts() });
@@ -138,12 +139,13 @@ function CommunityPage() {
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-bold text-mint">
                 {(post.author?.username ?? "A")[0].toUpperCase()}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{post.author?.username ?? "Аноним"}</p>
                 <p className="text-xs text-muted-foreground">
                   {new Date(post.created_at).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>
+              <ReportButton targetType="post" targetId={post.id} compact />
             </div>
             <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{post.content}</p>
             <div className="mt-4 flex items-center gap-4">

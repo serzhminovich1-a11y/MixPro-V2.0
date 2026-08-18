@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Shield, Check, X, EyeOff } from "lucide-react";
+import { Shield, Check, X, EyeOff, ExternalLink } from "lucide-react";
 import { listReports, resolveReport, moderateHide } from "@/lib/community.functions";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 import { RoleGate } from "@/components/role-gate";
@@ -21,11 +21,21 @@ export const Route = createFileRoute("/_authenticated/moderation")({
 type Report = {
   id: string;
   reporter_id: string;
+  reporter_username: string | null;
   target_type: "thread" | "reply" | "message" | "post" | "comment";
   target_id: string;
   reason: string;
   status: string;
   created_at: string;
+  preview: { title: string | null; content: string; authorUsername: string | null; threadId: string | null } | null;
+};
+
+const TARGET_LABEL: Record<Report["target_type"], string> = {
+  thread: "Тема форума",
+  reply: "Ответ на форуме",
+  message: "Сообщение в чате",
+  post: "Пост в ленте",
+  comment: "Комментарий",
 };
 
 function ModPage() {
@@ -55,9 +65,8 @@ function ModPage() {
   }
 
   async function doHide(r: Report) {
-    if (r.target_type === "post" || r.target_type === "comment") { toast("Скрытие постов/комментов ленты пока недоступно"); return; }
     try {
-      await hide({ data: { targetType: r.target_type as "thread" | "reply" | "message", targetId: r.target_id, hide: true } });
+      await hide({ data: { targetType: r.target_type, targetId: r.target_id, hide: true } });
       toast.success("Скрыто");
       await act(r.id, "resolved");
     } catch (e) { toast.error((e as Error).message); }
@@ -81,11 +90,33 @@ function ModPage() {
         {reports.map((r) => (
           <article key={r.id} className="panel rounded-xl p-4">
             <div className="flex items-center gap-2 text-xs">
-              <span className="rounded bg-secondary px-2 py-0.5 font-mono uppercase tracking-wider">{r.target_type}</span>
-              <span className="font-mono text-muted-foreground">{r.target_id.slice(0, 8)}</span>
+              <span className="rounded bg-secondary px-2 py-0.5 font-mono uppercase tracking-wider">{TARGET_LABEL[r.target_type]}</span>
+              <span className="text-muted-foreground">от @{r.reporter_username ?? r.reporter_id.slice(0, 8)}</span>
               <span className="ml-auto text-muted-foreground">{new Date(r.created_at).toLocaleString("ru-RU")}</span>
             </div>
-            <p className="mt-2 text-sm">{r.reason}</p>
+            <p className="mt-2 text-sm"><span className="text-muted-foreground">Причина:</span> {r.reason}</p>
+
+            {r.preview ? (
+              <div className="mt-2 rounded-lg border border-border bg-background/40 p-3">
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="font-semibold">@{r.preview.authorUsername ?? "аноним"}</span>
+                  {r.preview.threadId && (
+                    <Link
+                      to="/forum/thread/$id"
+                      params={{ id: r.preview.threadId }}
+                      className="ml-auto inline-flex items-center gap-1 text-mint hover:underline"
+                    >
+                      Открыть тред <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  )}
+                </div>
+                {r.preview.title && <p className="mt-1 text-sm font-semibold">{r.preview.title}</p>}
+                <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{r.preview.content}</p>
+              </div>
+            ) : (
+              <p className="mt-2 text-xs italic text-muted-foreground">Контент уже удалён или недоступен.</p>
+            )}
+
             <div className="mt-3 flex gap-2">
               <button onClick={() => doHide(r)} className="inline-flex items-center gap-1 rounded bg-destructive/20 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/30">
                 <EyeOff className="h-3 w-3" /> Скрыть и решить

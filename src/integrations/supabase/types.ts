@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_action_log: {
+        Row: {
+          action: string
+          actor_id: string
+          created_at: string
+          id: string
+          meta: Json
+          target_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          created_at?: string
+          id?: string
+          meta?: Json
+          target_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          created_at?: string
+          id?: string
+          meta?: Json
+          target_id?: string | null
+        }
+        Relationships: []
+      }
       certifications: {
         Row: {
           color: string
@@ -519,6 +546,7 @@ export type Database = {
           is_read: boolean
           post_id: string | null
           snippet: string | null
+          thread_id: string | null
           timestamp_ms: number | null
           track_index: number | null
           type: string
@@ -532,6 +560,7 @@ export type Database = {
           is_read?: boolean
           post_id?: string | null
           snippet?: string | null
+          thread_id?: string | null
           timestamp_ms?: number | null
           track_index?: number | null
           type: string
@@ -545,6 +574,7 @@ export type Database = {
           is_read?: boolean
           post_id?: string | null
           snippet?: string | null
+          thread_id?: string | null
           timestamp_ms?: number | null
           track_index?: number | null
           type?: string
@@ -558,6 +588,7 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          is_hidden: boolean
           post_id: string
         }
         Insert: {
@@ -565,6 +596,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          is_hidden?: boolean
           post_id: string
         }
         Update: {
@@ -572,6 +604,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          is_hidden?: boolean
           post_id?: string
         }
         Relationships: [
@@ -681,6 +714,7 @@ export type Database = {
           created_at: string
           genre: string | null
           id: string
+          is_hidden: boolean
           media_urls: string[]
           play_count: number
           title: string | null
@@ -692,6 +726,7 @@ export type Database = {
           created_at?: string
           genre?: string | null
           id?: string
+          is_hidden?: boolean
           media_urls?: string[]
           play_count?: number
           title?: string | null
@@ -703,6 +738,7 @@ export type Database = {
           created_at?: string
           genre?: string | null
           id?: string
+          is_hidden?: boolean
           media_urls?: string[]
           play_count?: number
           title?: string | null
@@ -1016,11 +1052,16 @@ export type Database = {
         Args: { _actor: string; _target: string; _tier: string; _until: string }
         Returns: undefined
       }
+      admin_set_verified: {
+        Args: { _actor: string; _target: string; _verified: boolean }
+        Returns: undefined
+      }
       can_act_on: {
         Args: { _actor: string; _target: string }
         Returns: boolean
       }
       can_moderate: { Args: { _user_id: string }; Returns: boolean }
+      claim_super_admin: { Args: { _actor: string }; Returns: undefined }
       has_active_subscription: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {
@@ -1042,7 +1083,12 @@ export type Database = {
         Returns: number
       }
       super_admin_self_boost: {
-        Args: { _actor: string; _delta_xp: number; _verified: boolean }
+        Args: {
+          _actor: string
+          _delta_xp: number
+          _level?: number
+          _verified: boolean
+        }
         Returns: undefined
       }
     }

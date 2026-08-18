@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Music2, Trash2, Upload, Loader2, Pause, Play, Waves, ExternalLink, Pin, PinOff, Scissors } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
-import { AdminTabs } from "./admin.options";
+import { AdminTabs } from "@/components/admin-tabs";
 import { listActiveLoops, setPinnedLoopId, getPinnedLoopId } from "@/lib/games/loops";
 import { LoopEditor } from "@/components/loop-editor";
 import { RoleGate } from "@/components/role-gate";
@@ -77,7 +77,6 @@ async function decodeDuration(file: File): Promise<number | null> {
 function AdminLoopsPage() {
   const { user } = Route.useRouteContext();
   const [allowed, setAllowed] = useState(false);
-  const [superAdmin, setSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loops, setLoops] = useState<Loop[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -121,7 +120,6 @@ function AdminLoopsPage() {
       if (!alive) return;
       const canMod = rs.some((r) => ["moderator", "admin", "super_admin"].includes(r));
       setAllowed(canMod);
-      setSuperAdmin(rs.includes("super_admin"));
       if (canMod) {
         const { data } = await supabase
           .from("game_loops")
@@ -212,8 +210,13 @@ function AdminLoopsPage() {
     if (!audioRef.current) audioRef.current = new Audio();
     audioRef.current.src = data.signedUrl;
     audioRef.current.onended = () => setPlayingId(null);
-    await audioRef.current.play();
-    setPlayingId(loop.id);
+    try {
+      await audioRef.current.play();
+      setPlayingId(loop.id);
+    } catch (e) {
+      toast.error("Не удалось воспроизвести превью");
+      setPlayingId(null);
+    }
   }
 
   if (loading) return <div className="mx-auto max-w-6xl px-4 py-10 text-muted-foreground">Загрузка…</div>;
@@ -227,7 +230,7 @@ function AdminLoopsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-      <AdminTabs superAdmin={superAdmin} active="loops" />
+      <AdminTabs active="loops" />
 
       <div className="flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-md border border-mint/40 bg-mint/10 text-mint">

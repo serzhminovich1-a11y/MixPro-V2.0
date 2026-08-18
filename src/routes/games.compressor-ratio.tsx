@@ -81,7 +81,12 @@ export function CompressorGame({ variant, gameType }: { variant: Variant; gameTy
   const correctSlot = order.indexOf(correctCfgIdx);
 
   function shuffle() {
-    const o = [0, 1, 2].sort(() => Math.random() - 0.5);
+    // Fisher-Yates — `sort(() => Math.random() - 0.5)` is not a uniform shuffle.
+    const o = [0, 1, 2];
+    for (let i = o.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [o[i], o[j]] = [o[j], o[i]];
+    }
     setOrder(o);
   }
 

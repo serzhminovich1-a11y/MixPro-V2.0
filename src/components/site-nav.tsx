@@ -20,6 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useAdmin } from "@/hooks/use-admin";
 import { useSiteTheme } from "@/hooks/use-theme-mode";
 import { SITE_THEMES, type SiteThemeId } from "@/lib/site-themes";
 import { MixproLogo, type LogoVariant } from "@/components/mixpro-logo";
@@ -60,6 +61,7 @@ function toggleSidebar() {
 
 export function SiteNav() {
   const { session } = useAuth();
+  const { isAdmin, canModerate } = useAdmin();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -163,12 +165,6 @@ export function SiteNav() {
         break;
       case "opt:admin":
         navigate({ to: "/admin" });
-        break;
-      case "opt:courses":
-        navigate({ to: "/admin/courses" });
-        break;
-      case "opt:glossary":
-        navigate({ to: "/admin/glossary" });
         break;
       case "help:tour":
         toast("Интерактивный тур", {
@@ -284,6 +280,16 @@ export function SiteNav() {
                       <MenuSep />
                       <MenuItem onClick={() => menuAction("opt:audio")}>Аудио настройки</MenuItem>
                       <MenuItem onClick={() => menuAction("opt:profile")}>Профиль</MenuItem>
+
+                      {canModerate && (
+                        <>
+                          <MenuSep />
+                          <MenuItem onClick={() => menuAction("opt:moderation")}>Модерация</MenuItem>
+                          {isAdmin && (
+                            <MenuItem onClick={() => menuAction("opt:admin")}>Админ-панель</MenuItem>
+                          )}
+                        </>
+                      )}
                     </>
                   )}
                   {label === "Помощь" && (

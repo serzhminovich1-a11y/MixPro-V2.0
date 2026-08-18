@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { AdminTabs } from "./admin.options";
+import { AdminTabs } from "@/components/admin-tabs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -73,8 +73,8 @@ import { RoleGate } from "@/components/role-gate";
 
 export const Route = createFileRoute("/_authenticated/admin/courses")({
   head: () => ({ meta: [{ title: "Редактор курсов — MixPro" }, { name: "robots", content: "noindex" }] }),
-  validateSearch: (s: Record<string, unknown>) => ({
-    module: typeof s.module === "string" ? s.module : undefined,
+  validateSearch: (s: Record<string, unknown>): { module?: string } => ({
+    ...(typeof s.module === "string" ? { module: s.module } : {}),
   }),
   component: () => (
     <RoleGate role="admin">
@@ -184,7 +184,7 @@ function CourseEditorPage() {
 
   return (
     <div className="mx-auto max-w-[1800px] px-4 py-6">
-      <AdminTabs superAdmin active="courses" />
+      <AdminTabs active="courses" />
 
       <div className="mt-4">
         {/* Editor top bar — catalog style */}

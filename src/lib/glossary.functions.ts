@@ -96,19 +96,23 @@ export const recordGlossaryQuiz = createServerFn({ method: "POST" })
       wrong_count: (existing?.wrong_count ?? 0) + (data.correct ? 0 : 1),
       last_seen_at: new Date().toISOString(),
     };
-    if (existing) {
-      await (supabaseAdmin as any).from("glossary_quiz_progress").update(patch).eq("id", existing.id);
-    } else {
-      await (supabaseAdmin as any).from("glossary_quiz_progress").insert(patch);
-    }
-    if (data.correct) {
-      // small XP bump
+    const { error: progressError } = existing
+      ? await (supabaseAdmin as any).from("glossary_quiz_progress").update(patch).eq("id", existing.id)
+      : await (supabaseAdmin as any).from("glossary_quiz_progress").insert(patch);
+    if (progressError) throw new Error(progressError.message);
+    // Award XP only the first time this term is ever answered correctly —
+    // the client already sees the full glossary (definitions included), so
+    // `correct` can't be verified server-side; capping to a one-time reward
+    // per term stops it from being farmed by resubmitting the same term.
+    const alreadyRewarded = (existing?.correct_count ?? 0) > 0;
+    if (data.correct && !alreadyRewarded) {
       const { data: prof } = await (supabaseAdmin as any).from("profiles").select("xp").eq("id", context.userId).maybeSingle();
       const nextXp = (prof?.xp ?? 0) + 5;
-      await (supabaseAdmin as any)
+      const { error: xpError } = await (supabaseAdmin as any)
         .from("profiles")
         .update({ xp: nextXp, level: 1 + Math.floor(Math.sqrt(nextXp / 100)) })
         .eq("id", context.userId);
+      if (xpError) throw new Error(xpError.message);
     }
     return { ok: true };
   });

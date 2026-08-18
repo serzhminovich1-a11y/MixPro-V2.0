@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { Bell, Check, CheckCheck, Play, Trash2, AtSign } from "lucide-react";
+import { Bell, Check, CheckCheck, Play, Trash2, AtSign, MessagesSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { MentionText } from "@/lib/mentions";
 
@@ -28,6 +28,7 @@ export type NotificationRow = {
   post_id: string | null;
   track_index: number | null;
   comment_id: string | null;
+  thread_id: string | null;
   timestamp_ms: number | null;
   snippet: string | null;
   is_read: boolean;
@@ -45,7 +46,7 @@ async function signAvatar(path: string | null): Promise<string | null> {
 export async function fetchNotifications(userId: string): Promise<NotificationRow[]> {
   const { data } = await supabase
     .from("notifications")
-    .select("id, user_id, actor_id, type, post_id, track_index, comment_id, timestamp_ms, snippet, is_read, created_at")
+    .select("id, user_id, actor_id, type, post_id, track_index, comment_id, thread_id, timestamp_ms, snippet, is_read, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -130,6 +131,8 @@ function NotificationsPage() {
         params: { postId: n.post_id },
         search: { track: n.track_index ?? 0, t: n.timestamp_ms ?? 0 },
       } as never);
+    } else if (n.type === "forum_reply" && n.thread_id) {
+      navigate({ to: "/forum/thread/$id", params: { id: n.thread_id } });
     }
   }
 
@@ -194,6 +197,7 @@ function NotificationsPage() {
           {filtered.map((n) => {
             const stamp = fmtMs(n.timestamp_ms);
             const isMention = n.type === "mention_track_comment";
+            const isForumReply = n.type === "forum_reply";
             return (
               <li
                 key={n.id}
@@ -220,6 +224,11 @@ function NotificationsPage() {
                         <AtSign className="h-2.5 w-2.5" /> упомянул тебя
                       </span>
                     )}
+                    {isForumReply && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-medium text-cyan-300">
+                        <MessagesSquare className="h-2.5 w-2.5" /> ответил в твоей теме
+                      </span>
+                    )}
                     {stamp && (
                       <span className="inline-flex items-center gap-1 rounded bg-mint/15 px-1.5 py-0.5 font-mono text-[10px] text-mint">
                         <Play className="h-2.5 w-2.5 fill-current" /> {stamp}
@@ -243,6 +252,15 @@ function NotificationsPage() {
                       >
                         <Play className="h-3 w-3" />
                         Перейти {stamp ? `к ${stamp}` : "к треку"}
+                      </button>
+                    )}
+                    {isForumReply && n.thread_id && (
+                      <button
+                        onClick={() => open(n)}
+                        className="inline-flex items-center gap-1 rounded-md border border-cyan/40 bg-cyan/10 px-2 py-1 text-[11px] text-cyan hover:bg-cyan/20"
+                      >
+                        <MessagesSquare className="h-3 w-3" />
+                        Перейти к теме
                       </button>
                     )}
                     {!n.is_read && (

@@ -9,7 +9,8 @@ import {
   AudioWaveform,
   Volume2,
   GraduationCap,
-  SlidersHorizontal,
+  Gauge,
+  ScrollText,
   MessagesSquare,
   User as UserIcon,
   PanelLeftClose,
@@ -43,7 +44,9 @@ const groups: Group[] = [
     adminOnly: true,
     tone: "admin",
     items: [
+      { label: "Дашборд", to: "/admin/dashboard", icon: Gauge, badge: "ADM" },
       { label: "Пользователи", to: "/admin", icon: Users, badge: "ADM" },
+      { label: "Журнал действий", to: "/admin/log", icon: ScrollText, badge: "ADM" },
       { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "ADM" },
       { label: "Глоссарий", to: "/admin/glossary", icon: Library, badge: "ADM" },
       { label: "Библиотека лупов", to: "/admin/loops", icon: Waves, badge: "ADM" },
@@ -56,7 +59,6 @@ const groups: Group[] = [
     superOnly: true,
     tone: "super",
     items: [
-      { label: "Опции системы", to: "/admin/options", icon: SlidersHorizontal, badge: "SU" },
       { label: "Роли и права", to: "/admin", hash: "roles", icon: Shield, badge: "SU" },
       { label: "Подписки", to: "/admin", hash: "subs", icon: Crown, badge: "SU" },
     ],

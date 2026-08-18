@@ -83,6 +83,15 @@ function LessonPage() {
   const [tocOpen, setTocOpen] = useState(true);
   const send = useServerFn(submitQuiz);
 
+  // This page stays mounted across Next/Prev lesson navigation (same route,
+  // different `slug`) — reset per-lesson quiz state or the previous lesson's
+  // result banner/answers would otherwise carry over into the new lesson.
+  useEffect(() => {
+    setAnswers({});
+    setResult(null);
+    setReaction(null);
+  }, [slug]);
+
   const modules = useMemo(
     () =>
       (toc.modules ?? []) as Array<{

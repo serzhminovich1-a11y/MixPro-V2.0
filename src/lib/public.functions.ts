@@ -86,24 +86,34 @@ export const getLessonBySlug = createServerFn({ method: "GET" })
 
 export const getPresets = createServerFn({ method: "GET" }).handler(async () => {
   const s = pub();
-  const [presetsRes, profilesRes] = await Promise.all([
-    s.from("presets").select("id, author_id, title, description, daw, genre, file_url, downloads, created_at, is_premium").order("created_at", { ascending: false }).limit(100),
-    s.from("profiles").select("id, username, avatar_url"),
-  ]);
+  const presetsRes = await s.from("presets").select("id, author_id, title, description, daw, genre, file_url, downloads, created_at, is_premium").order("created_at", { ascending: false }).limit(100);
   if (presetsRes.error) return { presets: [], error: presetsRes.error.message };
+  const authorIds = [...new Set((presetsRes.data ?? []).map((p) => p.author_id))];
+  const profilesRes = authorIds.length
+    ? await s.from("profiles").select("id, username, avatar_url").in("id", authorIds)
+    : { data: [] as { id: string; username: string; avatar_url: string | null }[] };
   const map = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
   return { presets: (presetsRes.data ?? []).map((p) => ({ ...p, author: map.get(p.author_id) ?? null })), error: null };
 });
 
 export const getPosts = createServerFn({ method: "GET" }).handler(async () => {
   const s = pub();
-  const [postsRes, profilesRes, likesRes, commentsRes] = await Promise.all([
-    s.from("posts").select("id, author_id, content, created_at").order("created_at", { ascending: false }).limit(50),
-    s.from("profiles").select("id, username, avatar_url, level"),
-    s.from("post_likes").select("post_id, user_id"),
-    s.from("post_comments").select("id, post_id, author_id, content, created_at").order("created_at", { ascending: true }),
-  ]);
+  const postsRes = await s.from("posts").select("id, author_id, content, created_at").eq("is_hidden", false).order("created_at", { ascending: false }).limit(50);
   if (postsRes.error) return { posts: [], error: postsRes.error.message };
+  const postIds = (postsRes.data ?? []).map((p) => p.id);
+  const [likesRes, commentsRes] = postIds.length
+    ? await Promise.all([
+        s.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+        s.from("post_comments").select("id, post_id, author_id, content, created_at").eq("is_hidden", false).in("post_id", postIds).order("created_at", { ascending: true }),
+      ])
+    : [{ data: [] as { post_id: string; user_id: string }[] }, { data: [] as { id: string; post_id: string; author_id: string; content: string; created_at: string }[] }];
+  const authorIds = [...new Set([
+    ...(postsRes.data ?? []).map((p) => p.author_id),
+    ...(commentsRes.data ?? []).map((c) => c.author_id),
+  ])];
+  const profilesRes = authorIds.length
+    ? await s.from("profiles").select("id, username, avatar_url, level").in("id", authorIds)
+    : { data: [] as { id: string; username: string; avatar_url: string | null; level: number }[] };
   const map = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
   const posts = (postsRes.data ?? []).map((post) => ({
     ...post,
@@ -148,8 +158,16 @@ export const getForumCategoryBySlug = createServerFn({ method: "GET" })
       .order("is_pinned", { ascending: false })
       .order("last_activity_at", { ascending: false })
       .limit(100);
-    const profilesRes = await s.from("profiles").select("id, username, avatar_url");
-    const repliesRes = await s.from("forum_replies").select("thread_id").eq("is_hidden", false);
+    const threadIds = (threadsRes.data ?? []).map((t) => t.id);
+    const authorIds = [...new Set((threadsRes.data ?? []).map((t) => t.author_id))];
+    const [profilesRes, repliesRes] = await Promise.all([
+      authorIds.length
+        ? s.from("profiles").select("id, username, avatar_url").in("id", authorIds)
+        : Promise.resolve({ data: [] as { id: string; username: string; avatar_url: string | null }[] }),
+      threadIds.length
+        ? s.from("forum_replies").select("thread_id").eq("is_hidden", false).in("thread_id", threadIds)
+        : Promise.resolve({ data: [] as { thread_id: string }[] }),
+    ]);
     const map = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
     const counts = new Map<string, number>();
     for (const r of repliesRes.data ?? []) counts.set(r.thread_id, (counts.get(r.thread_id) ?? 0) + 1);
@@ -167,9 +185,10 @@ export const getForumThread = createServerFn({ method: "GET" })
     const s = pub();
     const threadRes = await s.from("forum_threads").select("*").eq("id", input.id).eq("is_hidden", false).maybeSingle();
     if (threadRes.error || !threadRes.data) return { thread: null, replies: [], error: threadRes.error?.message ?? "not_found" };
-    const [repliesRes, profilesRes, catRes] = await Promise.all([
-      s.from("forum_replies").select("*").eq("thread_id", input.id).eq("is_hidden", false).order("created_at", { ascending: true }),
-      s.from("profiles").select("id, username, avatar_url, level"),
+    const repliesRes = await s.from("forum_replies").select("*").eq("thread_id", input.id).eq("is_hidden", false).order("created_at", { ascending: true });
+    const authorIds = [...new Set([threadRes.data.author_id, ...(repliesRes.data ?? []).map((r) => r.author_id)])];
+    const [profilesRes, catRes] = await Promise.all([
+      s.from("profiles").select("id, username, avatar_url, level").in("id", authorIds),
       s.from("forum_categories").select("*").eq("id", threadRes.data.category_id).maybeSingle(),
     ]);
     const map = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));

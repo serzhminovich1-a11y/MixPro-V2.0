@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Save, BookMarked, Image as ImageIcon, Film, Music, X, Pencil, Search, Upload } from "lucide-react";
 import { listGlossaryTerms, upsertGlossaryTerm, deleteGlossaryTerm, type GlossaryTerm, type TermMedia } from "@/lib/glossary.functions";
 import { uploadLessonAsset } from "@/lib/course-editor.functions";
-import { AdminTabs } from "./admin.options";
+import { AdminTabs } from "@/components/admin-tabs";
 import { RoleGate } from "@/components/role-gate";
 
 export const Route = createFileRoute("/_authenticated/admin/glossary")({
@@ -70,7 +70,7 @@ function AdminGlossaryPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <AdminTabs superAdmin active="glossary" />
+      <AdminTabs active="glossary" />
       <div className="mb-4 mt-4 flex items-center justify-between">
 
         <div className="flex items-center gap-2">

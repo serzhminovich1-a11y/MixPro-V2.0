@@ -180,6 +180,11 @@ const ALLOWED_ATTRS = new Set([
   "width", "height", "colspan", "rowspan", "allow", "allowfullscreen", "frameborder", "loading",
 ]);
 
+// ALLOWED_ATTRS only checks attribute *names* — href/src values still need
+// scheme validation, or `<a href="javascript:...">` sails straight through.
+const SAFE_URL = /^(https?:|mailto:|tel:|\/|#)/i;
+const URL_ATTRS = ["href", "src", "poster"];
+
 /** Very small sanitizer for contentEditable paragraph HTML (runs on save). */
 export function sanitizeInlineHtml(html: string): string {
   if (typeof window === "undefined") return html;
@@ -196,6 +201,10 @@ export function sanitizeInlineHtml(html: string): string {
       Array.from(c.attributes).forEach((a) => {
         if (!ALLOWED_ATTRS.has(a.name)) c.removeAttribute(a.name);
       });
+      for (const attr of URL_ATTRS) {
+        const v = c.getAttribute(attr);
+        if (v && !SAFE_URL.test(v.trim())) c.removeAttribute(attr);
+      }
       if (c.tagName === "A") {
         c.setAttribute("target", "_blank");
         c.setAttribute("rel", "noopener noreferrer");

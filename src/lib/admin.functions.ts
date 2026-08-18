@@ -1,21 +1,31 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Json } from "@/integrations/supabase/types";
+
+const RANKS: Record<string, number> = { super_admin: 3, admin: 2, moderator: 1, user: 0 };
+
+/** Fire-and-forget audit trail entry. Never blocks or fails the caller — a
+ * logging hiccup shouldn't stop an admin action that already succeeded. */
+async function logAction(actorId: string, action: string, targetId: string | null, meta: Record<string, unknown> = {}) {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("admin_action_log").insert({ actor_id: actorId, action, target_id: targetId, meta: meta as Json });
+  } catch {
+    /* audit log is best-effort */
+  }
+}
 
 /** Bootstrap: if no super_admin exists, current user becomes super_admin. */
 export const claimSuperAdmin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { count } = await supabaseAdmin
-      .from("user_roles")
-      .select("id", { count: "exact", head: true })
-      .eq("role", "super_admin");
-    if ((count ?? 0) > 0) throw new Error("Супер-админ уже назначен");
-    const { error } = await supabaseAdmin
-      .from("user_roles")
-      .insert({ user_id: context.userId, role: "super_admin" });
+    // Atomic check-and-insert (advisory-locked in the DB function) so two
+    // concurrent bootstrap attempts can't both succeed — see claim_super_admin
+    // in the migrations for why this used to be a two-call race.
+    const { error } = await context.supabase.rpc("claim_super_admin", { _actor: context.userId });
     if (error) throw new Error(error.message);
+    await logAction(context.userId, "claim_super_admin", null);
     return { ok: true };
   });
 
@@ -27,9 +37,8 @@ export const getMyAdminContext = createServerFn({ method: "GET" })
       .from("user_roles")
       .select("role")
       .eq("user_id", context.userId);
-    const ranks: Record<string, number> = { super_admin: 3, admin: 2, moderator: 1, user: 0 };
     const list = (roles ?? []).map((r) => r.role as string);
-    const rank = list.reduce((m, r) => Math.max(m, ranks[r] ?? 0), 0);
+    const rank = list.reduce((m, r) => Math.max(m, RANKS[r] ?? 0), 0);
     return {
       userId: context.userId,
       roles: list,
@@ -39,29 +48,36 @@ export const getMyAdminContext = createServerFn({ method: "GET" })
     };
   });
 
-/** List users with search, roles, bans, XP, certs. Admin+ only. */
+/** List users with search, roles, bans, XP, certs. Admin+ only. Paginated. */
 export const listUsers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { search?: string; limit?: number }) =>
-    z.object({ search: z.string().max(80).optional(), limit: z.number().int().min(1).max(200).optional() }).parse(input),
+  .validator((input: { search?: string; limit?: number; offset?: number; sort?: "xp" | "created_at" | "username" }) =>
+    z.object({
+      search: z.string().max(80).optional(),
+      limit: z.number().int().min(1).max(200).optional(),
+      offset: z.number().int().min(0).optional(),
+      sort: z.enum(["xp", "created_at", "username"]).optional(),
+    }).parse(input),
   )
   .handler(async ({ data, context }) => {
     const { data: myRoles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
-    const ranks: Record<string, number> = { super_admin: 3, admin: 2, moderator: 1, user: 0 };
-    const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, ranks[r.role] ?? 0), 0);
+    const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, RANKS[r.role] ?? 0), 0);
     if (myRank < 2) throw new Error("Только для админов");
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const limit = data.limit ?? 50;
+    const offset = data.offset ?? 0;
+    const sort = data.sort ?? "xp";
     let q = supabaseAdmin
       .from("profiles")
-      .select("id, username, avatar_url, xp, level, created_at, subscription_tier, subscription_until")
-      .order("xp", { ascending: false })
-      .limit(data.limit ?? 50);
+      .select("id, username, avatar_url, xp, level, created_at, verified, subscription_tier, subscription_until", { count: "exact" })
+      .order(sort, { ascending: sort === "username" })
+      .range(offset, offset + limit - 1);
     if (data.search && data.search.trim()) q = q.ilike("username", `%${data.search.trim()}%`);
-    const { data: profiles, error } = await q;
+    const { data: profiles, count, error } = await q;
     if (error) throw new Error(error.message);
     const ids = (profiles ?? []).map((p) => p.id);
-    if (ids.length === 0) return { users: [], myRank };
+    if (ids.length === 0) return { users: [], myRank, total: count ?? 0 };
 
     const [rolesRes, bansRes, certsRes, certsListRes] = await Promise.all([
       supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", ids),
@@ -72,7 +88,7 @@ export const listUsers = createServerFn({ method: "POST" })
     const certMap = new Map((certsListRes.data ?? []).map((c) => [c.id, c]));
     const users = (profiles ?? []).map((p) => {
       const roles = (rolesRes.data ?? []).filter((r) => r.user_id === p.id).map((r) => r.role as string);
-      const targetRank = roles.reduce((m, r) => Math.max(m, ranks[r] ?? 0), 0);
+      const targetRank = roles.reduce((m, r) => Math.max(m, RANKS[r] ?? 0), 0);
       const activeBan = (bansRes.data ?? []).find(
         (b) => b.user_id === p.id && (!b.expires_at || new Date(b.expires_at) > new Date()),
       );
@@ -89,7 +105,7 @@ export const listUsers = createServerFn({ method: "POST" })
         certs,
       };
     });
-    return { users, myRank };
+    return { users, myRank, total: count ?? 0 };
   });
 
 export const listCertifications = createServerFn({ method: "GET" }).handler(async () => {
@@ -123,6 +139,7 @@ export const setRole = createServerFn({ method: "POST" })
         .eq("role", data.role);
       if (error) throw new Error(error.message);
     }
+    await logAction(context.userId, data.grant ? "role_grant" : "role_revoke", data.targetId, { role: data.role });
     return { ok: true };
   });
 
@@ -138,6 +155,7 @@ export const adjustXp = createServerFn({ method: "POST" })
       _delta: data.delta,
     });
     if (error) throw new Error(error.message);
+    await logAction(context.userId, "xp_adjust", data.targetId, { delta: data.delta });
     return { ok: true };
   });
 
@@ -160,6 +178,7 @@ export const banUser = createServerFn({ method: "POST" })
       ...(expires ? { expires_at: expires } : {}),
     });
     if (error) throw new Error(error.message);
+    await logAction(context.userId, "ban", data.targetId, { reason: data.reason, days: data.days ?? null });
     return { ok: true };
   });
 
@@ -169,6 +188,7 @@ export const unbanUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("user_bans").delete().eq("user_id", data.targetId);
     if (error) throw new Error(error.message);
+    await logAction(context.userId, "unban", data.targetId);
     return { ok: true };
   });
 
@@ -197,6 +217,7 @@ export const awardCert = createServerFn({ method: "POST" })
         .eq("certification_id", data.certificationId);
       if (error) throw new Error(error.message);
     }
+    await logAction(context.userId, data.grant ? "cert_grant" : "cert_revoke", data.targetId, { certificationId: data.certificationId });
     return { ok: true };
   });
 
@@ -218,6 +239,7 @@ export const setSubscription = createServerFn({ method: "POST" })
       _until: data.until as unknown as string,
     });
     if (error) throw new Error(error.message);
+    await logAction(context.userId, "subscription_set", data.targetId, { tier: data.tier, until: data.until });
     return { ok: true };
   });
 
@@ -239,5 +261,127 @@ export const extendSubscription = createServerFn({ method: "POST" })
       _tier: data.tier ?? "pro",
     });
     if (error) throw new Error(error.message);
+    await logAction(context.userId, "subscription_extend", data.targetId, { days: data.days, tier: data.tier ?? "pro" });
     return { ok: true, until: newUntil as string };
+  });
+
+/** Verify/unverify another user (blue checkmark). Rank-hierarchical via RPC. */
+export const setVerified = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { targetId: string; verified: boolean }) =>
+    z.object({ targetId: z.string().uuid(), verified: z.boolean() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("admin_set_verified", {
+      _actor: context.userId,
+      _target: data.targetId,
+      _verified: data.verified,
+    });
+    if (error) throw new Error(error.message);
+    await logAction(context.userId, data.verified ? "verify" : "unverify", data.targetId);
+    return { ok: true };
+  });
+
+/** Super-admin boosts their own xp/level/verified. Self-only, checked in the RPC. */
+export const selfBoost = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { deltaXp?: number; verified?: boolean; level?: number }) =>
+    z.object({
+      deltaXp: z.number().int().optional(),
+      verified: z.boolean().optional(),
+      level: z.number().int().min(1).max(999).optional(),
+    }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("super_admin_self_boost", {
+      _actor: context.userId,
+      _delta_xp: data.deltaXp ?? 0,
+      _verified: data.verified ?? false,
+      _level: data.level,
+    });
+    if (error) throw new Error(error.message);
+    await logAction(context.userId, "self_boost", context.userId, data as Record<string, unknown>);
+    return { ok: true };
+  });
+
+/** Admin dashboard summary. Admin+ only. */
+export const getAdminStats = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: myRoles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
+    const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, RANKS[r.role] ?? 0), 0);
+    if (myRank < 2) throw new Error("Только для админов");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const now = new Date();
+    const dayAgo = new Date(now.getTime() - 86_400_000).toISOString();
+    const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+    const [
+      totalUsers, newUsers24h, newUsers7d, activeSubs,
+      games24h, posts24h, threads24h, chat24h, openReports,
+    ] = await Promise.all([
+      supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }),
+      supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).or(`subscription_tier.eq.lifetime,subscription_until.gt.${now.toISOString()}`),
+      supabaseAdmin.from("game_scores").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabaseAdmin.from("posts").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabaseAdmin.from("forum_threads").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabaseAdmin.from("chat_messages").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabaseAdmin.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
+    ]);
+
+    return {
+      totalUsers: totalUsers.count ?? 0,
+      newUsers24h: newUsers24h.count ?? 0,
+      newUsers7d: newUsers7d.count ?? 0,
+      activeSubs: activeSubs.count ?? 0,
+      games24h: games24h.count ?? 0,
+      posts24h: posts24h.count ?? 0,
+      threads24h: threads24h.count ?? 0,
+      chat24h: chat24h.count ?? 0,
+      openReports: openReports.count ?? 0,
+    };
+  });
+
+/** Paginated audit log of admin/super-admin actions. Moderator+ can view. */
+export const listAdminActions = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { limit?: number; before?: string }) =>
+    z.object({
+      limit: z.number().int().min(1).max(200).optional(),
+      before: z.string().datetime().optional(),
+    }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: myRoles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
+    const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, RANKS[r.role] ?? 0), 0);
+    if (myRank < 1) throw new Error("Недостаточно прав");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let q = supabaseAdmin
+      .from("admin_action_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(data.limit ?? 50);
+    if (data.before) q = q.lt("created_at", data.before);
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+
+    const ids = [...new Set([
+      ...(rows ?? []).map((r) => r.actor_id),
+      ...(rows ?? []).map((r) => r.target_id).filter((id): id is string => !!id),
+    ])];
+    const { data: profiles } = ids.length
+      ? await supabaseAdmin.from("profiles").select("id, username").in("id", ids)
+      : { data: [] as { id: string; username: string }[] };
+    const map = new Map((profiles ?? []).map((p) => [p.id, p.username]));
+
+    return {
+      actions: (rows ?? []).map((r) => ({
+        ...r,
+        actor_username: map.get(r.actor_id) ?? null,
+        target_username: r.target_id ? map.get(r.target_id) ?? null : null,
+      })),
+    };
   });

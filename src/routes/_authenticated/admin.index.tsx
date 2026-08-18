@@ -4,15 +4,18 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
   Shield, Crown, Search, Zap, Ban, ShieldCheck, Award,
-  UserX, Sparkles, ChevronDown, Clock, Infinity as InfinityIcon,
-  FileSpreadsheet,
+  UserX, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Clock, Infinity as InfinityIcon,
+  FileSpreadsheet, BadgeCheck,
 } from "lucide-react";
 import { exportUsersXlsx } from "@/lib/admin-export.functions";
 import {
   claimSuperAdmin, getMyAdminContext, listUsers, listCertifications,
   setRole, adjustXp, banUser, unbanUser, awardCert,
-  setSubscription, extendSubscription,
+  setSubscription, extendSubscription, setVerified, selfBoost,
 } from "@/lib/admin.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { LEAGUES } from "@/lib/leagues";
+import { AdminTabs } from "@/components/admin-tabs";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -22,15 +25,20 @@ export const Route = createFileRoute("/_authenticated/admin/")({
   notFoundComponent: RouteNotFound,
 });
 
+const PAGE_SIZE = 50;
+
 type Cert = { id: string; slug: string; name: string; color: string; icon: string | null };
 type UserRow = {
   id: string; username: string | null; avatar_url: string | null; xp: number; level: number;
   roles: string[]; targetRank: number; canAct: boolean;
   ban: { reason: string; expires_at: string | null; created_at: string } | null;
   certs: Cert[];
+  verified: boolean | null;
   subscription_tier: "free" | "trial" | "pro" | "lifetime" | string;
   subscription_until: string | null;
 };
+
+type MyProfile = { id: string; xp: number; level: number; verified: boolean };
 
 const TIER_LABEL: Record<string, string> = {
   free: "Free", trial: "Trial", pro: "PRO", lifetime: "Lifetime",
@@ -63,8 +71,14 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 function AdminPage() {
+  const { user } = Route.useRouteContext();
   const [ctx, setCtx] = useState<{ userId: string; roles: string[]; isSuperAdmin: boolean; isAdmin: boolean } | null>(null);
+  const [me, setMe] = useState<MyProfile | null>(null);
+  const [selfBusy, setSelfBusy] = useState(false);
+  const [boostDelta, setBoostDelta] = useState(1000);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [certs, setCerts] = useState<Cert[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -94,17 +108,25 @@ function AdminPage() {
   const _cert = useServerFn(awardCert);
   const _extendSub = useServerFn(extendSubscription);
   const _setSub = useServerFn(setSubscription);
+  const _setVerified = useServerFn(setVerified);
+  const _selfBoost = useServerFn(selfBoost);
 
-  async function reload() {
+  async function reload(opts?: { offset?: number }) {
     setLoading(true);
     try {
       const [c, cs] = await Promise.all([_ctx({}), _listCerts()]);
       setCtx(c);
       setCerts(cs.certifications as Cert[]);
       if (c.isAdmin) {
-        const r = await _list({ data: { search, limit: 100 } });
+        const offset = opts?.offset ?? page * PAGE_SIZE;
+        const r = await _list({ data: { search, limit: PAGE_SIZE, offset } });
         setUsers(r.users as UserRow[]);
         setMyRank(r.myRank);
+        setTotal(r.total);
+      }
+      if (c.isSuperAdmin) {
+        const { data } = await supabase.from("profiles").select("id, xp, level, verified").eq("id", user.id).maybeSingle();
+        if (data) setMe(data as MyProfile);
       }
     } catch (e) {
       toast.error((e as Error).message);
@@ -113,7 +135,17 @@ function AdminPage() {
     }
   }
 
-  useEffect(() => { reload().catch(() => {}); /* eslint-disable-next-line */ }, []);
+  // `reload` is a plain function re-created every render — adding it to the
+  // deps below would refire this effect in a loop. Only page changes (and
+  // the initial mount) should reload.
+  useEffect(() => {
+    reload().catch(() => {});
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function doSearch() {
+    setPage(0);
+    reload({ offset: 0 }).catch(() => {});
+  }
 
   async function doClaim() {
     try {
@@ -131,7 +163,20 @@ function AdminPage() {
     } catch (e) { toast.error((e as Error).message); }
   }
 
-  if (loading) return <div className="p-8 text-sm text-muted-foreground">Загрузка...</div>;
+  async function doSelfBoost(patch: { deltaXp?: number; verified?: boolean; level?: number }) {
+    setSelfBusy(true);
+    try {
+      await _selfBoost({ data: patch });
+      const { data } = await supabase.from("profiles").select("id, xp, level, verified").eq("id", user.id).maybeSingle();
+      if (data) setMe(data as MyProfile);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSelfBusy(false);
+    }
+  }
+
+  if (loading && users.length === 0 && !ctx) return <div className="p-8 text-sm text-muted-foreground">Загрузка...</div>;
   if (!ctx) return null;
 
   if (!ctx.isAdmin) {
@@ -152,14 +197,18 @@ function AdminPage() {
     );
   }
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <div className="flex items-center gap-3">
+      <AdminTabs active="users" />
+
+      <div className="mt-6 flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-lg bg-pink-500/10 text-pink-400">
           {ctx.isSuperAdmin ? <Crown className="h-5 w-5" /> : <Shield className="h-5 w-5" />}
         </div>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">Админ-панель</h1>
+          <h1 className="text-2xl font-bold">Пользователи</h1>
           <p className="text-xs text-muted-foreground">
             Твой ранг: <span className="text-mint">{ctx.roles.map((r) => ROLE_LABEL[r] ?? r).join(", ") || "—"}</span>
             {" · "}Ты можешь действовать только на пользователей ниже по рангу.
@@ -197,16 +246,96 @@ function AdminPage() {
         </button>
       </div>
 
+      {ctx.isSuperAdmin && (
+        <div className="mt-6 rounded-xl border border-yellow-400/30 bg-yellow-400/5 p-4">
+          <div className="flex items-center gap-2">
+            <Crown className="h-4 w-4 text-yellow-300" />
+            <h3 className="text-sm font-semibold text-yellow-200">Self-boost (только для своего аккаунта)</h3>
+            <span className="ml-auto text-[10px] uppercase tracking-widest text-yellow-400/70">dev</span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border bg-background/40 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-mint">XP · Lvl {me?.level ?? 1}</p>
+              <div className="mt-2 flex items-center gap-1.5">
+                <input
+                  type="number"
+                  value={boostDelta}
+                  onChange={(e) => setBoostDelta(Number(e.target.value) || 0)}
+                  className="w-full min-w-0 rounded border border-input bg-background px-2 py-1 text-sm font-mono outline-none focus:ring-1 focus:ring-ring"
+                />
+                <button
+                  disabled={selfBusy}
+                  onClick={() => doSelfBoost({ deltaXp: boostDelta })}
+                  className="inline-flex items-center gap-1 rounded-md bg-mint px-2 py-1 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50"
+                >
+                  <Zap className="h-3 w-3" />+
+                </button>
+                <button
+                  disabled={selfBusy}
+                  onClick={() => doSelfBoost({ deltaXp: -Math.abs(boostDelta) })}
+                  className="rounded-md border border-border px-2 py-1 text-xs"
+                >
+                  −
+                </button>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {[100, 500, 1000, 5000, 25000].map((v) => (
+                  <button
+                    key={v}
+                    disabled={selfBusy}
+                    onClick={() => doSelfBoost({ deltaXp: v })}
+                    className="rounded-full border border-border px-2 py-0.5 text-[10px] hover:bg-secondary"
+                  >
+                    +{v.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/40 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-violet">Лига</p>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {LEAGUES.map((L) => (
+                  <button
+                    key={L.key}
+                    disabled={selfBusy}
+                    onClick={() => doSelfBoost({ deltaXp: L.min - (me?.xp ?? 0) })}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${L.color} ${L.border}`}
+                  >
+                    <span>{L.icon}</span>
+                    {L.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/40 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan">Верификация</p>
+              <button
+                disabled={selfBusy}
+                onClick={() => doSelfBoost({ verified: !me?.verified })}
+                className={`mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
+                  me?.verified
+                    ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-200"
+                    : "border-border hover:bg-secondary"
+                }`}
+              >
+                <BadgeCheck className="h-3.5 w-3.5" />
+                {me?.verified ? "Верифицирован" : "Выдать себе"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="glass mt-6 flex items-center gap-2 rounded-xl p-2">
         <Search className="ml-2 h-4 w-4 text-muted-foreground" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && reload()}
+          onKeyDown={(e) => e.key === "Enter" && doSearch()}
           placeholder="Поиск по username..."
           className="flex-1 bg-transparent px-2 py-1.5 text-sm outline-none"
         />
-        <button onClick={reload} className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
+        <button onClick={doSearch} className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
           Найти
         </button>
       </div>
@@ -261,6 +390,7 @@ function AdminPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="truncate text-sm font-semibold">{u.username ?? "—"}</span>
+                    {u.verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-cyan-300" />}
                     {isSelf && <span className="rounded bg-mint/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mint">Ты</span>}
                     {u.roles.map((r) => (
                       <span key={r} className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${ROLE_COLORS[r] ?? ROLE_COLORS.user}`}>
@@ -317,6 +447,20 @@ function AdminPage() {
                             );
                           })}
                         </div>
+                      </section>
+
+                      {/* Verification */}
+                      <section>
+                        <h4 className="label-mono">Верификация</h4>
+                        <button
+                          onClick={() => run(() => _setVerified({ data: { targetId: u.id, verified: !u.verified } }), u.verified ? "Верификация снята" : "Верификация выдана")}
+                          className={`mt-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                            u.verified ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-200" : "border-border hover:bg-secondary"
+                          }`}
+                        >
+                          <BadgeCheck className="h-3.5 w-3.5" />
+                          {u.verified ? "Снять галочку" : "Выдать галочку"}
+                        </button>
                       </section>
 
                       {/* XP */}
@@ -442,7 +586,7 @@ function AdminPage() {
                                 onClick={() => run(() => _setSub({ data: { targetId: u.id, tier: "lifetime", until: null } }), "Lifetime ∞")}
                                 className="inline-flex items-center gap-1 rounded border border-yellow-400/40 bg-yellow-400/10 px-2 py-1 text-[10px] font-bold text-yellow-300"
                               >
-                                <InfinityIcon className="h-3 w-3" /> Lifetime
+                                <InfinityIcon className="h-3.5 w-3.5" /> Lifetime
                               </button>
                             </div>
                             <p className="mt-2 text-[10px] text-muted-foreground">
@@ -465,6 +609,26 @@ function AdminPage() {
           </p>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-3 text-xs text-muted-foreground">
+          <button
+            disabled={page === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 font-semibold disabled:opacity-30"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Назад
+          </button>
+          <span>Стр. {page + 1} из {totalPages} · {total} польз.</span>
+          <button
+            disabled={page + 1 >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 font-semibold disabled:opacity-30"
+          >
+            Вперёд <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

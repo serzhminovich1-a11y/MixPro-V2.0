@@ -20,6 +20,7 @@ export const listCoursesTree = createServerFn({ method: "GET" }).handler(async (
     (s as any).from("lessons").select("id, module_id, is_published, order_index").eq("is_published", true).order("order_index"),
   ]);
   if (mods.error) return { courses: [], error: mods.error.message };
+  if (lessons.error) return { courses: [], error: lessons.error.message };
   const counts = new Map<string, number>();
   for (const l of (lessons.data ?? []) as Array<{ module_id: string | null }>) {
     if (!l.module_id) continue;
@@ -90,8 +91,11 @@ export const saveCoursePositions = createServerFn({ method: "POST" })
     const has = (roles ?? []).some((r: any) => ["admin", "super_admin", "moderator"].includes(r.role));
     if (!has) throw new Error("Только для модераторов и админов");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const failed: string[] = [];
     for (const p of data.positions) {
-      await (supabaseAdmin as any).from("course_modules").update({ position_x: p.x, position_y: p.y }).eq("id", p.id);
+      const { error } = await (supabaseAdmin as any).from("course_modules").update({ position_x: p.x, position_y: p.y }).eq("id", p.id);
+      if (error) failed.push(p.id);
     }
+    if (failed.length > 0) throw new Error(`Не удалось сохранить позиции: ${failed.length} из ${data.positions.length}`);
     return { ok: true };
   });

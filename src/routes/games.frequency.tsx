@@ -25,8 +25,8 @@ export const Route = createFileRoute("/games/frequency")({
       { name: "description", content: "Услышь любую частоту. Четыре уровня сложности, ranked-режим, свободная тренировка и Perfection-бонус." },
     ],
   }),
-  validateSearch: (s: Record<string, unknown>) => ({
-    loopId: typeof s.loopId === "string" ? s.loopId : undefined,
+  validateSearch: (s: Record<string, unknown>): { loopId?: string } => ({
+    ...(typeof s.loopId === "string" ? { loopId: s.loopId } : {}),
   }),
   component: FrequencyGame,
 });
@@ -208,7 +208,19 @@ function FrequencyGame() {
       });
     }).catch(() => {});
     return () => { alive = false; };
+    // Deliberately mount-only: the initial fetch + empty-loops fallback should
+    // only run once. Re-applying ?loopId= after a URL change is handled below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // If ?loopId= changes while this page stays mounted (e.g. a nav link back
+  // to /games/frequency with no loopId, after arriving via an admin deep
+  // link with one), re-apply it instead of leaving `settings.loopId` stale.
+  useEffect(() => {
+    if (loops.length === 0) return;
+    const fromUrl = search.loopId && loops.find((r) => r.id === search.loopId) ? search.loopId : null;
+    if (fromUrl) setSettings((s) => ({ ...s, source: "loop", loopId: fromUrl }));
+  }, [search.loopId, loops]);
 
   // Decode the selected loop when source is "loop".
   useEffect(() => {

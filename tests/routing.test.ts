@@ -7,7 +7,6 @@ const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
 describe("/admin/courses routing", () => {
   const coursesSrc = read("src/routes/_authenticated/admin.courses.tsx");
   const indexSrc = read("src/routes/_authenticated/admin.index.tsx");
-  const optionsSrc = read("src/routes/_authenticated/admin.options.tsx");
   const routeTree = read("src/routeTree.gen.ts");
 
   it("admin.courses.tsx declares the /_authenticated/admin/courses route", () => {
@@ -17,11 +16,15 @@ describe("/admin/courses routing", () => {
   });
 
   it("admin.courses.tsx renders the course editor component (not the users page)", () => {
-    // Route must bind component: CourseEditorPage — the editor, not AdminPage/UsersPage.
-    expect(coursesSrc).toMatch(/component:\s*CourseEditorPage\b/);
+    // Route's `component:` must render <CourseEditorPage/> (optionally wrapped,
+    // e.g. in <RoleGate>) — the editor, not AdminPage/UsersPage.
+    const start = coursesSrc.indexOf("component:");
+    expect(start).toBeGreaterThan(-1);
+    const componentBlock = coursesSrc.slice(start, start + 400);
+    expect(componentBlock).toMatch(/<CourseEditorPage\b/);
     expect(coursesSrc).toMatch(/function\s+CourseEditorPage\b/);
-    expect(coursesSrc).not.toMatch(/component:\s*AdminPage\b/);
-    expect(coursesSrc).not.toMatch(/component:\s*UsersPage\b/);
+    expect(componentBlock).not.toMatch(/<AdminPage\b/);
+    expect(componentBlock).not.toMatch(/<UsersPage\b/);
   });
 
   it("admin.index.tsx is the leaf /admin route, not a parent that swallows /admin/courses", () => {
@@ -29,12 +32,6 @@ describe("/admin/courses routing", () => {
     // acting as a parent layout without an <Outlet />.
     expect(indexSrc).toMatch(
       /createFileRoute\(\s*["']\/_authenticated\/admin\/["']\s*\)/,
-    );
-  });
-
-  it("admin.options.tsx declares /_authenticated/admin/options", () => {
-    expect(optionsSrc).toMatch(
-      /createFileRoute\(\s*["']\/_authenticated\/admin\/options["']\s*\)/,
     );
   });
 

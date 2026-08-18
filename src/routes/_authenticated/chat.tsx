@@ -34,6 +34,8 @@ function ChatPage() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, { username: string | null }>>({});
+  const profilesRef = useRef(profiles);
+  useEffect(() => { profilesRef.current = profiles; }, [profiles]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ function ChatPage() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, async (payload) => {
         const m = payload.new as Msg;
         if (m.is_hidden) return;
-        if (!profiles[m.author_id]) {
+        if (!profilesRef.current[m.author_id]) {
           const { data: p } = await supabase.from("profiles").select("id, username").eq("id", m.author_id).maybeSingle();
           if (p) setProfiles((prev) => ({ ...prev, [p.id]: { username: p.username } }));
         }
@@ -72,7 +74,6 @@ function ChatPage() {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

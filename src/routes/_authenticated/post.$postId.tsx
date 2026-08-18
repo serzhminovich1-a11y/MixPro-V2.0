@@ -32,7 +32,8 @@ export const Route = createFileRoute("/_authenticated/post/$postId")({
 async function signWall(path: string): Promise<string | null> {
   if (!path) return null;
   if (path.startsWith("http")) return path;
-  const { data } = await supabase.storage.from("wall").createSignedUrl(path, 3600);
+  const { data, error } = await supabase.storage.from("wall").createSignedUrl(path, 3600);
+  if (error) console.error("[post] failed to sign track URL", path, error.message);
   return data?.signedUrl ?? null;
 }
 
@@ -95,6 +96,11 @@ function PostViewPage() {
         } as PlayerTrack;
       }))).filter(Boolean) as PlayerTrack[];
       setTracks(built);
+      if (built.length === 0 && list.length > 0) {
+        setErr("Не удалось загрузить треки этого поста — файлы недоступны в хранилище.");
+        setLoading(false);
+        return;
+      }
 
       // Moderation flag
       const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
