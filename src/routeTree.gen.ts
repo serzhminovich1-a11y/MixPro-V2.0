@@ -40,6 +40,7 @@ import { Route as GamesCompressorAttackRouteImport } from './routes/games.compre
 import { Route as GamesCompressionRouteImport } from './routes/games.compression'
 import { Route as ForumCategoryRouteImport } from './routes/forum.$category'
 import { Route as CoursesSlugRouteImport } from './routes/courses.$slug'
+import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-password'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedModerationRouteImport } from './routes/_authenticated/moderation'
@@ -208,6 +209,11 @@ const CoursesSlugRoute = CoursesSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => CoursesRoute,
 } as any)
+const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -280,7 +286,7 @@ const AuthenticatedAdminCoursesRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/brand': typeof BrandRoute
   '/community': typeof CommunityRoute
   '/courses': typeof CoursesRouteWithChildren
@@ -292,6 +298,7 @@ export interface FileRoutesByFullPath {
   '/moderation': typeof AuthenticatedModerationRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/courses/$slug': typeof CoursesSlugRoute
   '/forum/$category': typeof ForumCategoryRoute
   '/games/compression': typeof GamesCompressionRoute
@@ -325,7 +332,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/brand': typeof BrandRoute
   '/community': typeof CommunityRoute
   '/courses': typeof CoursesRouteWithChildren
@@ -337,6 +344,7 @@ export interface FileRoutesByTo {
   '/moderation': typeof AuthenticatedModerationRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/courses/$slug': typeof CoursesSlugRoute
   '/forum/$category': typeof ForumCategoryRoute
   '/games/compression': typeof GamesCompressionRoute
@@ -372,7 +380,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/brand': typeof BrandRoute
   '/community': typeof CommunityRoute
   '/courses': typeof CoursesRouteWithChildren
@@ -384,6 +392,7 @@ export interface FileRoutesById {
   '/_authenticated/moderation': typeof AuthenticatedModerationRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/courses/$slug': typeof CoursesSlugRoute
   '/forum/$category': typeof ForumCategoryRoute
   '/games/compression': typeof GamesCompressionRoute
@@ -431,6 +440,7 @@ export interface FileRouteTypes {
     | '/moderation'
     | '/notifications'
     | '/profile'
+    | '/auth/reset-password'
     | '/courses/$slug'
     | '/forum/$category'
     | '/games/compression'
@@ -476,6 +486,7 @@ export interface FileRouteTypes {
     | '/moderation'
     | '/notifications'
     | '/profile'
+    | '/auth/reset-password'
     | '/courses/$slug'
     | '/forum/$category'
     | '/games/compression'
@@ -522,6 +533,7 @@ export interface FileRouteTypes {
     | '/_authenticated/moderation'
     | '/_authenticated/notifications'
     | '/_authenticated/profile'
+    | '/auth/reset-password'
     | '/courses/$slug'
     | '/forum/$category'
     | '/games/compression'
@@ -557,7 +569,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  AuthRoute: typeof AuthRoute
+  AuthRoute: typeof AuthRouteWithChildren
   BrandRoute: typeof BrandRoute
   CommunityRoute: typeof CommunityRoute
   CoursesRoute: typeof CoursesRouteWithChildren
@@ -807,6 +819,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CoursesSlugRouteImport
       parentRoute: typeof CoursesRoute
     }
+    '/auth/reset-password': {
+      id: '/auth/reset-password'
+      path: '/reset-password'
+      fullPath: '/auth/reset-password'
+      preLoaderRoute: typeof AuthResetPasswordRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_authenticated/profile': {
       id: '/_authenticated/profile'
       path: '/profile'
@@ -934,6 +953,16 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface AuthRouteChildren {
+  AuthResetPasswordRoute: typeof AuthResetPasswordRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthResetPasswordRoute: AuthResetPasswordRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 interface CoursesRouteChildren {
   CoursesSlugRoute: typeof CoursesSlugRoute
 }
@@ -948,7 +977,7 @@ const CoursesRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  AuthRoute: AuthRoute,
+  AuthRoute: AuthRouteWithChildren,
   BrandRoute: BrandRoute,
   CommunityRoute: CommunityRoute,
   CoursesRoute: CoursesRouteWithChildren,

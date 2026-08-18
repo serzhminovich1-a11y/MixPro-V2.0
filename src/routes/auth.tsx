@@ -20,7 +20,7 @@ export const Route = createFileRoute("/auth")({
 });
 
 function AuthPage() {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -28,6 +28,27 @@ function AuthPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Covers accounts that only ever signed in via Google (no password was
+  // ever set) as much as regular "forgot my password" — Supabase's reset
+  // flow works the same way either way, it just sets one.
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
+      if (error) throw error;
+      setInfo("Если такой email зарегистрирован — на него отправлена ссылка для сброса пароля. Проверьте почту (и папку «Спам»).");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleGoogle() {
     setError(null);
@@ -85,12 +106,45 @@ function AuthPage() {
     <div className="flex min-h-[80vh] items-center justify-center px-4 py-16">
       <div className="glass w-full max-w-md rounded-2xl p-8">
         <h1 className="text-2xl font-bold">
-          {mode === "login" ? "С возвращением" : "Создать аккаунт"}
+          {mode === "login" ? "С возвращением" : mode === "signup" ? "Создать аккаунт" : "Восстановление пароля"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {mode === "login" ? "Войдите, чтобы продолжить тренировки." : "Присоединяйтесь к сообществу звукорежиссёров."}
+          {mode === "login"
+            ? "Войдите, чтобы продолжить тренировки."
+            : mode === "signup"
+              ? "Присоединяйтесь к сообществу звукорежиссёров."
+              : "Укажите email — пришлём ссылку для установки нового пароля. Подходит и для аккаунтов, которые раньше входили только через Google."}
         </p>
 
+        {mode === "forgot" ? (
+          <form onSubmit={handleForgotPassword} className="mt-6 space-y-4">
+            <input
+              type="email"
+              required
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            {info && <p className="text-sm text-mint">{info}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.02] disabled:opacity-50"
+            >
+              {loading ? "Секунду..." : "Отправить ссылку"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode("login"); setError(null); setInfo(null); }}
+              className="w-full text-center text-sm font-semibold text-primary hover:underline"
+            >
+              Назад ко входу
+            </button>
+          </form>
+        ) : (
+          <>
         {GOOGLE_LOGIN_ENABLED && (
           <>
             <button
@@ -139,6 +193,15 @@ function AuthPage() {
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
+          {mode === "login" && (
+            <button
+              type="button"
+              onClick={() => { setMode("forgot"); setError(null); setInfo(null); }}
+              className="block text-right text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+            >
+              Забыли пароль?
+            </button>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
           {info && <p className="text-sm text-mint">{info}</p>}
           <button
@@ -163,6 +226,8 @@ function AuthPage() {
             {mode === "login" ? "Зарегистрироваться" : "Войти"}
           </button>
         </p>
+          </>
+        )}
       </div>
     </div>
   );
