@@ -5,7 +5,6 @@ import { BookMarked, Search, Sparkles, Play, ChevronRight, Trophy, X, Layers, Ch
 import { listGlossaryTerms, recordGlossaryQuiz, type GlossaryTerm, type TermMedia } from "@/lib/glossary.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { AudioAB } from "@/components/audio-ab";
-import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
@@ -220,9 +219,7 @@ function TermModal({ term, onClose }: { term: GlossaryTerm; onClose: () => void 
         </div>
         <p className="mt-3 text-sm text-foreground/90">{term.short_def}</p>
         {term.long_def_md && (
-          <div className="prose-custom mt-4 text-sm">
-            <ReactMarkdown>{term.long_def_md}</ReactMarkdown>
-          </div>
+          <div className="prose-custom mt-4 text-sm" dangerouslySetInnerHTML={{ __html: term.long_def_md }} />
         )}
         {Array.isArray(term.media) && term.media.length > 0 && (
           <div className="mt-5 space-y-3">
@@ -632,9 +629,7 @@ function CardFace({ term, flipped }: { term: GlossaryTerm; flipped: boolean }) {
         <div className="h-[calc(100%-2.5rem)] overflow-y-auto pt-4">
           <p className="text-base leading-relaxed text-foreground/90">{term.short_def}</p>
           {term.long_def_md && (
-            <div className="prose-custom mt-3 text-sm">
-              <ReactMarkdown>{term.long_def_md}</ReactMarkdown>
-            </div>
+            <div className="prose-custom mt-3 text-sm" dangerouslySetInnerHTML={{ __html: term.long_def_md }} />
           )}
           {Array.isArray(term.media) && term.media.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-1">

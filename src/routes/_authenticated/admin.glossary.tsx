@@ -7,6 +7,8 @@ import { listGlossaryTerms, upsertGlossaryTerm, deleteGlossaryTerm, type Glossar
 import { AdminTabs } from "@/components/admin-tabs";
 import { RoleGate } from "@/components/role-gate";
 import { ImageEditor } from "@/components/image-editor";
+import { RichTextEditor } from "@/components/rich-text-editor";
+import { sanitizeInlineHtml } from "@/lib/course-blocks";
 import { useAuth } from "@/hooks/use-auth";
 import { uploadWithProgress, formatBytes } from "@/lib/upload-progress";
 
@@ -47,7 +49,7 @@ function AdminGlossaryPage() {
           term: editing.term!,
           category: editing.category ?? "general",
           short_def: editing.short_def!,
-          long_def_md: editing.long_def_md ?? null,
+          long_def_md: editing.long_def_md ? sanitizeInlineHtml(editing.long_def_md) : null,
           media: (editing.media ?? []) as any,
           difficulty: (editing.difficulty as any) ?? "basic",
           tags: editing.tags ?? [],
@@ -186,8 +188,13 @@ function AdminGlossaryPage() {
             <Field label="Короткое определение (одно предложение)">
               <textarea value={editing.short_def ?? ""} onChange={(e) => setEditing({ ...editing, short_def: e.target.value })} rows={2} className="w-full rounded bg-black/40 px-3 py-2 text-sm" />
             </Field>
-            <Field label="Полное описание (Markdown)">
-              <textarea value={editing.long_def_md ?? ""} onChange={(e) => setEditing({ ...editing, long_def_md: e.target.value })} rows={5} className="w-full rounded bg-black/40 px-3 py-2 text-sm font-mono" />
+            <Field label="Полное описание">
+              <RichTextEditor
+                value={editing.long_def_md ?? ""}
+                onChange={(html) => setEditing({ ...editing, long_def_md: html })}
+                placeholder="Подробное объяснение термина — форматируй как в тексте: жирный, цвет, шрифт, списки, картинки…"
+                minHeight={220}
+              />
             </Field>
 
             <MediaEditor
