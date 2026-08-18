@@ -1,10 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, ZoomIn, ZoomOut, RotateCcw, RotateCw, FlipHorizontal, Check, Maximize2 } from "lucide-react";
 
+/** "free" keeps the old behavior — frame matches the photo's own shape,
+ * so two source images with different native crops end up filling a
+ * shared downstream grid (card thumbnails, etc.) inconsistently. The
+ * fixed ratios pin the frame to a specific shape instead, so whatever's
+ * inside it lines up with every other image cropped to the same ratio. */
+const ASPECT_PRESETS = [
+  { id: "free", label: "Свободно", ratio: null },
+  { id: "16:9", label: "16:9", ratio: 16 / 9 },
+  { id: "1:1", label: "1:1", ratio: 1 },
+  { id: "4:3", label: "4:3", ratio: 4 / 3 },
+] as const;
+type AspectId = (typeof ASPECT_PRESETS)[number]["id"];
+
 type Props = {
   file: File;
   /** Max output dimension (px) on the longer side. */
   maxOutput?: number;
+  /** Which aspect preset is selected when the editor opens. Defaults to
+   * "free". Pass the ratio the image will actually be displayed at
+   * downstream (e.g. "16:9" for a card-grid thumbnail) so the default
+   * crop already matches it. */
+  defaultAspect?: AspectId;
   onCancel: () => void;
   onConfirm: (blob: Blob, mimeType: string) => void | Promise<void>;
 };
@@ -15,17 +33,18 @@ const FRAME_MAX = 420; // on-screen frame box (px)
  * General-purpose crop/rotate/flip editor — same drag-to-pan,
  * wheel-to-zoom interaction as AvatarEditor, but for arbitrary
  * (non-square) images: the frame follows the image's own aspect ratio
- * instead of forcing a circle, and adds 90°-step rotate + horizontal
- * flip. Used wherever a plain file picker isn't enough (glossary term
- * media, etc.) — AvatarEditor stays as-is for the avatar's fixed
- * circular crop.
+ * by default (or a fixed preset — see ASPECT_PRESETS) instead of
+ * forcing a circle, and adds 90°-step rotate + horizontal flip. Used
+ * wherever a plain file picker isn't enough (glossary term media,
+ * etc.) — AvatarEditor stays as-is for the avatar's fixed circular crop.
  */
-export function ImageEditor({ file, maxOutput = 1600, onCancel, onConfirm }: Props) {
+export function ImageEditor({ file, maxOutput = 1600, defaultAspect = "free", onCancel, onConfirm }: Props) {
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(0);
   const [flip, setFlip] = useState(false);
+  const [aspectId, setAspectId] = useState<AspectId>(defaultAspect);
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
   const [busy, setBusy] = useState(false);
@@ -45,12 +64,20 @@ export function ImageEditor({ file, maxOutput = 1600, onCancel, onConfirm }: Pro
   const effW = img ? (rotated ? img.height : img.width) : 1;
   const effH = img ? (rotated ? img.width : img.height) : 1;
 
+  const presetRatio = ASPECT_PRESETS.find((p) => p.id === aspectId)?.ratio ?? null;
   const frame = useMemo(() => {
-    const aspect = effW / effH;
+    const aspect = presetRatio ?? effW / effH;
     return aspect >= 1
       ? { w: FRAME_MAX, h: Math.round(FRAME_MAX / aspect) }
       : { w: Math.round(FRAME_MAX * aspect), h: FRAME_MAX };
-  }, [effW, effH]);
+  }, [effW, effH, presetRatio]);
+
+  // Frame shape changed — old pan/zoom no longer means the same thing.
+  function selectAspect(id: AspectId) {
+    setAspectId(id);
+    setOffset({ x: 0, y: 0 });
+    setZoom(1);
+  }
 
   function fitScale(): number {
     if (!img) return 1;
@@ -98,7 +125,7 @@ export function ImageEditor({ file, maxOutput = 1600, onCancel, onConfirm }: Pro
     setZoom(1);
   }
   function resetAll() {
-    setZoom(1); setOffset({ x: 0, y: 0 }); setRotation(0); setFlip(false);
+    setZoom(1); setOffset({ x: 0, y: 0 }); setRotation(0); setFlip(false); setAspectId(defaultAspect);
   }
 
   async function confirm() {
@@ -212,6 +239,21 @@ export function ImageEditor({ file, maxOutput = 1600, onCancel, onConfirm }: Pro
               <div key={i} className="border border-white/25" />
             ))}
           </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-center gap-1.5">
+          <span className="mr-1 text-[11px] text-muted-foreground">Пропорции:</span>
+          {ASPECT_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => selectAspect(p.id)}
+              className={`rounded-lg border px-2.5 py-1 text-xs transition ${
+                aspectId === p.id ? "border-mint/50 bg-mint/10 text-mint" : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
 
         <div className="mt-4 flex items-center gap-3">

@@ -333,6 +333,7 @@ function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: strin
       {editing && (
         <ImageEditor
           file={editing}
+          defaultAspect="16:9"
           onCancel={() => setEditing(null)}
           onConfirm={async (blob, mime) => {
             const ext = mime === "image/png" ? "png" : "jpg";
