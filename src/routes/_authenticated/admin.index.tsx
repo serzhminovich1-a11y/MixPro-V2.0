@@ -15,7 +15,6 @@ import {
 } from "@/lib/admin.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { LEAGUES } from "@/lib/leagues";
-import { AdminTabs } from "@/components/admin-tabs";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -201,9 +200,7 @@ function AdminPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <AdminTabs active="users" />
-
-      <div className="mt-6 flex items-center gap-3">
+      <div className="flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-lg bg-pink-500/10 text-pink-400">
           {ctx.isSuperAdmin ? <Crown className="h-5 w-5" /> : <Shield className="h-5 w-5" />}
         </div>

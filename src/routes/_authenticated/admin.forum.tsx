@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { MessagesSquare, Plus, Pencil, Trash2, X, Loader2 } from "lucide-react";
 import { getForumCategories } from "@/lib/public.functions";
 import { upsertCategory, deleteCategory } from "@/lib/community.functions";
-import { AdminTabs } from "@/components/admin-tabs";
 import { RoleGate } from "@/components/role-gate";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
@@ -89,8 +88,7 @@ function AdminForumPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
-      <AdminTabs active="forum" />
-      <div className="mt-6 flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-lg bg-cyan/10 text-cyan">
             <MessagesSquare className="h-5 w-5" />

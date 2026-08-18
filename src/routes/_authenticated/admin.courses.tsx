@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { AdminTabs } from "@/components/admin-tabs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -186,9 +185,7 @@ function CourseEditorPage() {
 
   return (
     <div className="mx-auto max-w-[1800px] px-4 py-6">
-      <AdminTabs active="courses" />
-
-      <div className="mt-4">
+      <div>
         {/* Editor top bar — catalog style */}
         <header className="glass mb-4 flex items-center justify-between rounded-2xl px-5 py-3">
           <div className="flex items-center gap-3">

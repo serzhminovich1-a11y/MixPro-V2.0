@@ -4,7 +4,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Plus, Trash2, Save, BookMarked, Image as ImageIcon, Film, Music, X, Pencil, Search, Upload } from "lucide-react";
 import { listGlossaryTerms, upsertGlossaryTerm, deleteGlossaryTerm, type GlossaryTerm, type TermMedia } from "@/lib/glossary.functions";
-import { AdminTabs } from "@/components/admin-tabs";
 import { RoleGate } from "@/components/role-gate";
 import { ImageEditor } from "@/components/image-editor";
 import { RichTextEditor } from "@/components/rich-text-editor";
@@ -74,8 +73,7 @@ function AdminGlossaryPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <AdminTabs active="glossary" />
-      <div className="mb-4 mt-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
 
         <div className="flex items-center gap-2">
           <BookMarked className="h-5 w-5 text-cyan" />

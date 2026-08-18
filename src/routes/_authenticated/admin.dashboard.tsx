@@ -3,7 +3,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Gauge, Users, UserPlus, CreditCard, Gamepad2, MessageSquare, MessagesSquare, Flag, Loader2 } from "lucide-react";
 import { getAdminStats } from "@/lib/admin.functions";
-import { AdminTabs } from "@/components/admin-tabs";
 import { RoleGate } from "@/components/role-gate";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
@@ -45,8 +44,7 @@ function AdminDashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <AdminTabs active="dashboard" />
-      <div className="mt-6 flex items-center gap-3">
+      <div className="flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-lg bg-mint/10 text-mint">
           <Gauge className="h-5 w-5" />
         </div>

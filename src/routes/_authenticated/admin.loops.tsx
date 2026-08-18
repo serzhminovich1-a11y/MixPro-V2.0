@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { Music2, Trash2, Upload, Loader2, Pause, Play, Waves, ExternalLink, Pin, PinOff, Scissors } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
-import { AdminTabs } from "@/components/admin-tabs";
 import { listActiveLoops, setPinnedLoopId, getPinnedLoopId } from "@/lib/games/loops";
 import { uploadWithProgress, removeStorageObjects } from "@/lib/upload-progress";
 import { resolveStorageUrl } from "@/lib/storage-url";
@@ -227,8 +226,6 @@ function AdminLoopsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-      <AdminTabs active="loops" />
-
       <div className="flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-md border border-mint/40 bg-mint/10 text-mint">
           <Music2 className="h-5 w-5" />

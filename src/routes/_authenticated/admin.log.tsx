@@ -3,7 +3,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ScrollText, Loader2 } from "lucide-react";
 import { listAdminActions } from "@/lib/admin.functions";
-import { AdminTabs } from "@/components/admin-tabs";
 import { RoleGate } from "@/components/role-gate";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
@@ -82,8 +81,7 @@ function AdminLogPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <AdminTabs active="log" />
-      <div className="mt-6 flex items-center gap-3">
+      <div className="flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-lg bg-violet/10 text-violet">
           <ScrollText className="h-5 w-5" />
         </div>
