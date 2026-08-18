@@ -5,7 +5,7 @@ import {
   Shield, ShieldCheck, Crown, ImagePlus, Send, Trash2,
   Music4, Loader2, AlertTriangle, BadgeCheck,
   Search, LayoutGrid, List as ListIcon, Plus, ChevronDown, ChevronUp,
-  Play, Heart, MessageCircle, Headphones,
+  Play, Heart, MessageCircle, Headphones, KeyRound,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -92,6 +92,12 @@ function ProfilePage() {
   const [form, setForm] = useState({ username: "", full_name: "", bio: "" });
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [pwForm, setPwForm] = useState({ password: "", confirm: "" });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwDone, setPwDone] = useState(false);
 
   const [posts, setPosts] = useState<WallPost[]>([]);
   const [postText, setPostText] = useState("");
@@ -200,6 +206,36 @@ function ProfilePage() {
     if (!error) {
       setProfile({ ...profile, username: form.username.trim(), full_name: form.full_name.trim() || null, bio: form.bio.trim() || null });
       setEditing(false);
+    }
+  }
+
+  async function savePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwError(null);
+    if (pwForm.password.length < 6) {
+      setPwError("Пароль должен быть не короче 6 символов.");
+      return;
+    }
+    if (pwForm.password !== pwForm.confirm) {
+      setPwError("Пароли не совпадают.");
+      return;
+    }
+    setPwSaving(true);
+    try {
+      // Works regardless of how the current session was established
+      // (email/password, Google, or a recovery link) — updateUser just
+      // needs any active session. This is now the durable way to set a
+      // password on an account, including ones that only ever signed in
+      // via Google, without depending on the email-link redirect flow.
+      const { error } = await supabase.auth.updateUser({ password: pwForm.password });
+      if (error) throw error;
+      setPwDone(true);
+      setPwForm({ password: "", confirm: "" });
+      setTimeout(() => { setChangingPassword(false); setPwDone(false); }, 2000);
+    } catch (err) {
+      setPwError(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setPwSaving(false);
     }
   }
 
@@ -478,6 +514,55 @@ function ProfilePage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Password */}
+      <div className="glass mt-4 rounded-2xl p-5">
+        {!changingPassword ? (
+          <button
+            type="button"
+            onClick={() => { setChangingPassword(true); setPwError(null); setPwDone(false); }}
+            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <KeyRound className="h-4 w-4" /> Сменить пароль
+          </button>
+        ) : (
+          <form onSubmit={savePassword} className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <KeyRound className="h-4 w-4" /> Сменить пароль
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="password"
+                required
+                minLength={6}
+                placeholder="Новый пароль"
+                value={pwForm.password}
+                onChange={(e) => setPwForm({ ...pwForm, password: e.target.value })}
+                className="min-w-[180px] flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+              <input
+                type="password"
+                required
+                minLength={6}
+                placeholder="Повторите пароль"
+                value={pwForm.confirm}
+                onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
+                className="min-w-[180px] flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            {pwError && <p className="text-sm text-destructive">{pwError}</p>}
+            {pwDone && <p className="text-sm text-mint">Пароль обновлён.</p>}
+            <div className="flex gap-2">
+              <button type="submit" disabled={pwSaving} className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+                <Check className="h-4 w-4" /> {pwSaving ? "Секунду..." : "Сохранить"}
+              </button>
+              <button type="button" onClick={() => { setChangingPassword(false); setPwError(null); setPwForm({ password: "", confirm: "" }); }} className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm">
+                <X className="h-4 w-4" /> Отмена
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
