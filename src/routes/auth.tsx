@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -25,15 +24,18 @@ function AuthPage() {
 
   async function handleGoogle() {
     setError(null);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+    // Native Supabase OAuth — needs the Google provider configured in
+    // Supabase (Authentication → Providers → Google) with its own Google
+    // Cloud OAuth client. On success this navigates the browser away to
+    // Google itself, so nothing after this call runs; the eventual
+    // callback lands back on /profile.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/profile` },
     });
-    if (result.error) {
+    if (error) {
       setError("Не удалось войти через Google. Попробуйте ещё раз.");
-      return;
     }
-    if ("redirected" in result && result.redirected) return;
-    navigate({ to: "/profile" });
   }
 
   async function handleSubmit(e: React.FormEvent) {
