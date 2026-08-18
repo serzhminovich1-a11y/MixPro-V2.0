@@ -98,23 +98,37 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
   }, [sourceMode]);
 
   useEffect(() => {
+    // Runs synchronously as part of the browser's own selectionchange
+    // dispatch — i.e. on every single click in the editor, not just
+    // formatting actions. document.queryCommandValue is a legacy,
+    // inconsistently-implemented API, and calling it (or triggering the
+    // setCurrentBlock re-render that follows) from inside that dispatch
+    // is exactly the kind of thing that behaves differently across
+    // Chromium builds. Defer to the next frame so none of this runs
+    // until after the browser has already fully committed the click's
+    // own caret placement — reported as caret placement needing several
+    // clicks to "take" in Brave (not reproducible in stock Chromium).
+    let raf = 0;
     function poll() {
-      if (!ref.current) return;
-      const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return;
-      const anchor = sel.anchorNode;
-      if (!anchor || !ref.current.contains(anchor)) return;
-      if (!sel.isCollapsed) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
-      try {
-        const fb = document.queryCommandValue("formatBlock");
-        if (typeof fb === "string" && fb) {
-          const normalized = fb.toLowerCase().replace(/[<>]/g, "").trim();
-          if (normalized) setCurrentBlock(normalized === "div" ? "p" : normalized);
-        }
-      } catch {}
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (!ref.current) return;
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const anchor = sel.anchorNode;
+        if (!anchor || !ref.current.contains(anchor)) return;
+        if (!sel.isCollapsed) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+        try {
+          const fb = document.queryCommandValue("formatBlock");
+          if (typeof fb === "string" && fb) {
+            const normalized = fb.toLowerCase().replace(/[<>]/g, "").trim();
+            if (normalized) setCurrentBlock(normalized === "div" ? "p" : normalized);
+          }
+        } catch {}
+      });
     }
     document.addEventListener("selectionchange", poll);
-    return () => document.removeEventListener("selectionchange", poll);
+    return () => { document.removeEventListener("selectionchange", poll); cancelAnimationFrame(raf); };
   }, []);
 
   function commit() {
