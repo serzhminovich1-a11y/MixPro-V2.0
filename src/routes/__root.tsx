@@ -10,6 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import fontsCss from "../fonts.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteNav } from "@/components/site-nav";
@@ -99,17 +100,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      // Self-hosted (see fonts.css) — was fonts.googleapis.com, but a
+      // third-party font CDN is exactly what privacy-focused browsers
+      // throttle/block, and a late font swap can shift text under an
+      // already-placed cursor. Same-origin sidesteps that.
+      { rel: "stylesheet", href: fontsCss },
       // ?v=2 busts browsers' notoriously sticky favicon-specific cache — it
       // ignores normal Cache-Control on this file and can survive even a
       // hard refresh / closed tab. Bump this number if the icon ever
       // changes again and still doesn't show up for users.
       { rel: "icon", href: "/favicon.ico?v=2", type: "image/x-icon" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Michroma&family=Archivo+Black&display=swap",
-      },
     ],
   }),
   shellComponent: RootShell,
