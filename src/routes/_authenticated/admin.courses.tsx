@@ -21,6 +21,7 @@ import {
   type Block,
 } from "@/lib/course-blocks";
 import { BlockRenderer } from "@/components/block-renderer";
+import { ImageEditor } from "@/components/image-editor";
 import { toast } from "sonner";
 import {
   Plus,
@@ -1293,9 +1294,10 @@ function ToolBtn({ onClick, children, title }: { onClick: () => void; children: 
 
 function MediaInput({ url, onUrl, accept, hint }: { url: string; onUrl: (u: string) => void; accept: string; hint: string }) {
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<File | null>(null);
   const upload = useServerFn(uploadLessonAsset);
 
-  async function handleFile(file: File) {
+  async function doUpload(file: File | Blob, filename: string, contentType: string) {
     if (file.size > 40 * 1024 * 1024) {
       toast.error("Файл больше 40 МБ. Загрузите на внешний хост и вставьте URL.");
       return;
@@ -1307,7 +1309,7 @@ function MediaInput({ url, onUrl, accept, hint }: { url: string; onUrl: (u: stri
       let bin = "";
       for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
       const base64 = btoa(bin);
-      const r = await upload({ data: { filename: file.name, contentType: file.type || "application/octet-stream", base64 } });
+      const r = await upload({ data: { filename, contentType: contentType || "application/octet-stream", base64 } });
       onUrl(r.url);
       toast.success("Загружено");
     } catch (e: any) {
@@ -1317,8 +1319,25 @@ function MediaInput({ url, onUrl, accept, hint }: { url: string; onUrl: (u: stri
     }
   }
 
+  function handleFile(file: File) {
+    const editable = file.type.startsWith("image/") && file.type !== "image/gif";
+    if (editable) setEditing(file);
+    else doUpload(file, file.name, file.type);
+  }
+
   return (
     <div className="space-y-2">
+      {editing && (
+        <ImageEditor
+          file={editing}
+          onCancel={() => setEditing(null)}
+          onConfirm={async (blob, mime) => {
+            const ext = mime === "image/png" ? "png" : "jpg";
+            await doUpload(blob, editing.name.replace(/\.[^.]+$/, "") + `.${ext}`, mime);
+            setEditing(null);
+          }}
+        />
+      )}
       <input value={url} onChange={(e) => onUrl(e.target.value)} placeholder={hint} className="w-full rounded bg-black/40 px-2 py-1 text-sm" />
       <label className="inline-flex cursor-pointer items-center gap-2 rounded border border-mint/40 bg-mint/10 px-3 py-1.5 text-xs text-mint hover:bg-mint/20">
         <Upload className="h-3.5 w-3.5" /> {busy ? "Загрузка…" : "Загрузить файл"}

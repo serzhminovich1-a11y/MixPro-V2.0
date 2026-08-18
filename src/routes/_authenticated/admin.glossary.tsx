@@ -7,6 +7,7 @@ import { listGlossaryTerms, upsertGlossaryTerm, deleteGlossaryTerm, type Glossar
 import { uploadLessonAsset } from "@/lib/course-editor.functions";
 import { AdminTabs } from "@/components/admin-tabs";
 import { RoleGate } from "@/components/role-gate";
+import { ImageEditor } from "@/components/image-editor";
 
 export const Route = createFileRoute("/_authenticated/admin/glossary")({
   head: () => ({ meta: [{ title: "Библиотека терминов — админ — MixPro" }, { name: "robots", content: "noindex" }] }),
@@ -278,8 +279,9 @@ function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: strin
   const upload = useServerFn(uploadLessonAsset);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [editing, setEditing] = useState<File | null>(null);
 
-  async function handleFile(file: File) {
+  async function doUpload(file: File | Blob, filename: string, contentType: string) {
     if (file.size > 40 * 1024 * 1024) {
       toast.error("Файл больше 40 МБ. Загрузите на внешний хост и вставьте URL.");
       return;
@@ -297,7 +299,7 @@ function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: strin
       }
       const base64 = btoa(bin);
       setProgress(70);
-      const r = await upload({ data: { filename: file.name, contentType: file.type || "application/octet-stream", base64 } });
+      const r = await upload({ data: { filename, contentType: contentType || "application/octet-stream", base64 } });
       setProgress(100);
       onChange(r.url);
       toast.success("Загружено");
@@ -309,8 +311,29 @@ function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: strin
     }
   }
 
+  function handleFile(file: File) {
+    // GIFs and video would lose their animation if run through the
+    // canvas-based editor (it only ever draws one frame) — upload those
+    // as-is. Regular static images (photos, screenshots, PNG/JPG/WEBP)
+    // get the crop/rotate step first.
+    const editable = file.type.startsWith("image/") && file.type !== "image/gif";
+    if (editable) setEditing(file);
+    else doUpload(file, file.name, file.type);
+  }
+
   return (
     <div className="space-y-1">
+      {editing && (
+        <ImageEditor
+          file={editing}
+          onCancel={() => setEditing(null)}
+          onConfirm={async (blob, mime) => {
+            const ext = mime === "image/png" ? "png" : "jpg";
+            await doUpload(blob, editing.name.replace(/\.[^.]+$/, "") + `.${ext}`, mime);
+            setEditing(null);
+          }}
+        />
+      )}
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded bg-black/40 px-2 py-1 text-xs font-mono" />
       <div className="flex items-center gap-2">
         <label className="inline-flex cursor-pointer items-center gap-1 rounded border border-mint/40 bg-mint/10 px-2 py-1 text-[10px] text-mint hover:bg-mint/20">
