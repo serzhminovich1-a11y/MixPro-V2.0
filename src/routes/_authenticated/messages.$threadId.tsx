@@ -91,9 +91,9 @@ function ThreadPage() {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-6rem)] max-w-2xl flex-col px-4 py-6">
-      <header className="flex items-center gap-3 border-b border-black/60 pb-3">
-        <Link to="/messages" aria-label="Назад к сообщениям" className="text-muted-foreground hover:text-foreground">
+    <div className="flex h-full flex-col">
+      <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <Link to="/messages" aria-label="Назад к сообщениям" className="text-muted-foreground hover:text-foreground md:hidden">
           <ArrowLeft className="h-4 w-4" />
         </Link>
         {other && (
@@ -108,7 +108,7 @@ function ThreadPage() {
         )}
       </header>
 
-      <div className="flex-1 space-y-2 overflow-y-auto py-4">
+      <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
         {loading ? (
           <p className="text-center text-sm text-muted-foreground py-8">Загрузка...</p>
         ) : messages.length === 0 ? (
@@ -131,7 +131,7 @@ function ThreadPage() {
         <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={send} className="glass flex items-center gap-2 rounded-xl p-2">
+      <form onSubmit={send} className="flex items-center gap-2 border-t border-border p-3">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
