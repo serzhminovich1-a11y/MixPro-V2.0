@@ -99,7 +99,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      // ?v=2 busts browsers' notoriously sticky favicon-specific cache — it
+      // ignores normal Cache-Control on this file and can survive even a
+      // hard refresh / closed tab. Bump this number if the icon ever
+      // changes again and still doesn't show up for users.
+      { rel: "icon", href: "/favicon.ico?v=2", type: "image/x-icon" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
