@@ -25,6 +25,7 @@ import { useSiteTheme } from "@/hooks/use-theme-mode";
 import { SITE_THEMES, type SiteThemeId } from "@/lib/site-themes";
 import { MixproLogo, type LogoVariant } from "@/components/mixpro-logo";
 import { NotificationsBell } from "@/components/notifications-bell";
+import { MessagesBell } from "@/components/messages-bell";
 
 const LOGO_KEY = "mixpro:logo-variant";
 function readLogoVariant(): LogoVariant {
@@ -373,6 +374,7 @@ export function SiteNav() {
 
           {session ? (
             <>
+              <MessagesBell />
               <NotificationsBell />
               <Link
                 to="/profile"

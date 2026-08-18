@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Bell, AtSign, MessagesSquare, Play, CheckCheck } from "lucide-react";
+import { Bell, AtSign, MessagesSquare, Play, CheckCheck, UserPlus, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { fetchNotifications, type NotificationRow } from "@/routes/_authenticated/notifications";
@@ -101,6 +101,10 @@ export function NotificationsBell() {
       } as never);
     } else if (n.type === "forum_reply" && n.thread_id) {
       navigate({ to: "/forum/thread/$id", params: { id: n.thread_id } });
+    } else if (n.type === "dm" && n.thread_id) {
+      navigate({ to: "/messages/$threadId", params: { threadId: n.thread_id } });
+    } else if (n.type === "follow" && n.actor?.username) {
+      navigate({ to: "/u/$username", params: { username: n.actor.username } });
     }
   }
 
@@ -155,6 +159,9 @@ export function NotificationsBell() {
                   const stamp = fmtMs(n.timestamp_ms);
                   const isMention = n.type === "mention_track_comment";
                   const isForumReply = n.type === "forum_reply";
+                  const isFollow = n.type === "follow";
+                  const isDm = n.type === "dm";
+                  const snippet = n.snippet ?? (isFollow ? "Подписался(-ась) на вас" : isDm ? "Новое сообщение" : null);
                   return (
                     <li key={n.id}>
                       <button
@@ -174,6 +181,8 @@ export function NotificationsBell() {
                             <span className="truncate font-semibold">@{n.actor?.username ?? "?"}</span>
                             {isMention && <AtSign className="h-2.5 w-2.5 text-violet-300" />}
                             {isForumReply && <MessagesSquare className="h-2.5 w-2.5 text-cyan-300" />}
+                            {isFollow && <UserPlus className="h-2.5 w-2.5 text-mint" />}
+                            {isDm && <Mail className="h-2.5 w-2.5 text-amber-300" />}
                             {stamp && (
                               <span className="inline-flex items-center gap-0.5 rounded bg-mint/15 px-1 font-mono text-[9px] text-mint">
                                 <Play className="h-2 w-2 fill-current" />
@@ -182,8 +191,8 @@ export function NotificationsBell() {
                             )}
                             <span className="ml-auto text-[9px] text-muted-foreground">{fmtAgo(n.created_at)}</span>
                           </div>
-                          {n.snippet && (
-                            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{n.snippet}</p>
+                          {snippet && (
+                            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{snippet}</p>
                           )}
                         </div>
                         {!n.is_read && <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-mint" />}

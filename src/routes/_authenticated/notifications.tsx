@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { Bell, Check, CheckCheck, Play, Trash2, AtSign, MessagesSquare } from "lucide-react";
+import { Bell, Check, CheckCheck, Play, Trash2, AtSign, MessagesSquare, UserPlus, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { MentionText } from "@/lib/mentions";
 
@@ -133,6 +133,10 @@ function NotificationsPage() {
       } as never);
     } else if (n.type === "forum_reply" && n.thread_id) {
       navigate({ to: "/forum/thread/$id", params: { id: n.thread_id } });
+    } else if (n.type === "dm" && n.thread_id) {
+      navigate({ to: "/messages/$threadId", params: { threadId: n.thread_id } });
+    } else if (n.type === "follow" && n.actor?.username) {
+      navigate({ to: "/u/$username", params: { username: n.actor.username } });
     }
   }
 
@@ -198,6 +202,9 @@ function NotificationsPage() {
             const stamp = fmtMs(n.timestamp_ms);
             const isMention = n.type === "mention_track_comment";
             const isForumReply = n.type === "forum_reply";
+            const isFollow = n.type === "follow";
+            const isDm = n.type === "dm";
+            const snippet = n.snippet ?? (isFollow ? "Подписался(-ась) на вас" : isDm ? "Новое сообщение" : null);
             return (
               <li
                 key={n.id}
@@ -229,6 +236,16 @@ function NotificationsPage() {
                         <MessagesSquare className="h-2.5 w-2.5" /> ответил в твоей теме
                       </span>
                     )}
+                    {isFollow && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-mint/15 px-2 py-0.5 text-[10px] font-medium text-mint">
+                        <UserPlus className="h-2.5 w-2.5" /> новый подписчик
+                      </span>
+                    )}
+                    {isDm && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                        <Mail className="h-2.5 w-2.5" /> личное сообщение
+                      </span>
+                    )}
                     {stamp && (
                       <span className="inline-flex items-center gap-1 rounded bg-mint/15 px-1.5 py-0.5 font-mono text-[10px] text-mint">
                         <Play className="h-2.5 w-2.5 fill-current" /> {stamp}
@@ -236,12 +253,12 @@ function NotificationsPage() {
                     )}
                     <span className="ml-auto text-[10px] text-muted-foreground">{fmtDate(n.created_at)}</span>
                   </div>
-                  {n.snippet && (
+                  {snippet && (
                     <button
                       onClick={() => open(n)}
                       className="mt-1 block w-full rounded-lg bg-secondary/40 px-3 py-2 text-left text-sm text-foreground/90 hover:bg-secondary"
                     >
-                      <MentionText text={n.snippet} />
+                      <MentionText text={snippet} />
                     </button>
                   )}
                   <div className="mt-2 flex items-center gap-2">
@@ -261,6 +278,24 @@ function NotificationsPage() {
                       >
                         <MessagesSquare className="h-3 w-3" />
                         Перейти к теме
+                      </button>
+                    )}
+                    {isDm && n.thread_id && (
+                      <button
+                        onClick={() => open(n)}
+                        className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-300 hover:bg-amber-500/20"
+                      >
+                        <Mail className="h-3 w-3" />
+                        Открыть диалог
+                      </button>
+                    )}
+                    {isFollow && n.actor?.username && (
+                      <button
+                        onClick={() => open(n)}
+                        className="inline-flex items-center gap-1 rounded-md border border-mint/40 bg-mint/10 px-2 py-1 text-[11px] text-mint hover:bg-mint/20"
+                      >
+                        <UserPlus className="h-3 w-3" />
+                        Профиль
                       </button>
                     )}
                     {!n.is_read && (

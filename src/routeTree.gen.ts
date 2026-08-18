@@ -44,10 +44,12 @@ import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-passw
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedModerationRouteImport } from './routes/_authenticated/moderation'
+import { Route as AuthenticatedMessagesRouteImport } from './routes/_authenticated/messages'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as ForumThreadIdRouteImport } from './routes/forum.thread.$id'
 import { Route as AuthenticatedPostPostIdRouteImport } from './routes/_authenticated/post.$postId'
+import { Route as AuthenticatedMessagesThreadIdRouteImport } from './routes/_authenticated/messages.$threadId'
 import { Route as AuthenticatedAdminLoopsRouteImport } from './routes/_authenticated/admin.loops'
 import { Route as AuthenticatedAdminLogRouteImport } from './routes/_authenticated/admin.log'
 import { Route as AuthenticatedAdminGlossaryRouteImport } from './routes/_authenticated/admin.glossary'
@@ -230,6 +232,11 @@ const AuthenticatedModerationRoute = AuthenticatedModerationRouteImport.update({
   path: '/moderation',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMessagesRoute = AuthenticatedMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
   id: '/chat',
   path: '/chat',
@@ -250,6 +257,12 @@ const AuthenticatedPostPostIdRoute = AuthenticatedPostPostIdRouteImport.update({
   path: '/post/$postId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMessagesThreadIdRoute =
+  AuthenticatedMessagesThreadIdRouteImport.update({
+    id: '/$threadId',
+    path: '/$threadId',
+    getParentRoute: () => AuthenticatedMessagesRoute,
+  } as any)
 const AuthenticatedAdminLoopsRoute = AuthenticatedAdminLoopsRouteImport.update({
   id: '/admin/loops',
   path: '/admin/loops',
@@ -295,6 +308,7 @@ export interface FileRoutesByFullPath {
   '/leaderboard': typeof LeaderboardRoute
   '/presets': typeof PresetsRoute
   '/chat': typeof AuthenticatedChatRoute
+  '/messages': typeof AuthenticatedMessagesRouteWithChildren
   '/moderation': typeof AuthenticatedModerationRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -326,6 +340,7 @@ export interface FileRoutesByFullPath {
   '/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
   '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
+  '/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
   '/post/$postId': typeof AuthenticatedPostPostIdRoute
   '/forum/thread/$id': typeof ForumThreadIdRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
@@ -341,6 +356,7 @@ export interface FileRoutesByTo {
   '/leaderboard': typeof LeaderboardRoute
   '/presets': typeof PresetsRoute
   '/chat': typeof AuthenticatedChatRoute
+  '/messages': typeof AuthenticatedMessagesRouteWithChildren
   '/moderation': typeof AuthenticatedModerationRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/profile': typeof AuthenticatedProfileRoute
@@ -372,6 +388,7 @@ export interface FileRoutesByTo {
   '/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
   '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
+  '/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
   '/post/$postId': typeof AuthenticatedPostPostIdRoute
   '/forum/thread/$id': typeof ForumThreadIdRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
@@ -389,6 +406,7 @@ export interface FileRoutesById {
   '/leaderboard': typeof LeaderboardRoute
   '/presets': typeof PresetsRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
+  '/_authenticated/messages': typeof AuthenticatedMessagesRouteWithChildren
   '/_authenticated/moderation': typeof AuthenticatedModerationRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
@@ -420,6 +438,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
   '/_authenticated/admin/log': typeof AuthenticatedAdminLogRoute
   '/_authenticated/admin/loops': typeof AuthenticatedAdminLoopsRoute
+  '/_authenticated/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
   '/_authenticated/post/$postId': typeof AuthenticatedPostPostIdRoute
   '/forum/thread/$id': typeof ForumThreadIdRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
@@ -437,6 +456,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/presets'
     | '/chat'
+    | '/messages'
     | '/moderation'
     | '/notifications'
     | '/profile'
@@ -468,6 +488,7 @@ export interface FileRouteTypes {
     | '/admin/glossary'
     | '/admin/log'
     | '/admin/loops'
+    | '/messages/$threadId'
     | '/post/$postId'
     | '/forum/thread/$id'
     | '/admin/'
@@ -483,6 +504,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/presets'
     | '/chat'
+    | '/messages'
     | '/moderation'
     | '/notifications'
     | '/profile'
@@ -514,6 +536,7 @@ export interface FileRouteTypes {
     | '/admin/glossary'
     | '/admin/log'
     | '/admin/loops'
+    | '/messages/$threadId'
     | '/post/$postId'
     | '/forum/thread/$id'
     | '/admin'
@@ -530,6 +553,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/presets'
     | '/_authenticated/chat'
+    | '/_authenticated/messages'
     | '/_authenticated/moderation'
     | '/_authenticated/notifications'
     | '/_authenticated/profile'
@@ -561,6 +585,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/glossary'
     | '/_authenticated/admin/log'
     | '/_authenticated/admin/loops'
+    | '/_authenticated/messages/$threadId'
     | '/_authenticated/post/$postId'
     | '/forum/thread/$id'
     | '/_authenticated/admin/'
@@ -847,6 +872,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedModerationRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/messages': {
+      id: '/_authenticated/messages'
+      path: '/messages'
+      fullPath: '/messages'
+      preLoaderRoute: typeof AuthenticatedMessagesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/chat': {
       id: '/_authenticated/chat'
       path: '/chat'
@@ -874,6 +906,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/post/$postId'
       preLoaderRoute: typeof AuthenticatedPostPostIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/messages/$threadId': {
+      id: '/_authenticated/messages/$threadId'
+      path: '/$threadId'
+      fullPath: '/messages/$threadId'
+      preLoaderRoute: typeof AuthenticatedMessagesThreadIdRouteImport
+      parentRoute: typeof AuthenticatedMessagesRoute
     }
     '/_authenticated/admin/loops': {
       id: '/_authenticated/admin/loops'
@@ -920,8 +959,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedMessagesRouteChildren {
+  AuthenticatedMessagesThreadIdRoute: typeof AuthenticatedMessagesThreadIdRoute
+}
+
+const AuthenticatedMessagesRouteChildren: AuthenticatedMessagesRouteChildren = {
+  AuthenticatedMessagesThreadIdRoute: AuthenticatedMessagesThreadIdRoute,
+}
+
+const AuthenticatedMessagesRouteWithChildren =
+  AuthenticatedMessagesRoute._addFileChildren(
+    AuthenticatedMessagesRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
+  AuthenticatedMessagesRoute: typeof AuthenticatedMessagesRouteWithChildren
   AuthenticatedModerationRoute: typeof AuthenticatedModerationRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
@@ -937,6 +990,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChatRoute: AuthenticatedChatRoute,
+  AuthenticatedMessagesRoute: AuthenticatedMessagesRouteWithChildren,
   AuthenticatedModerationRoute: AuthenticatedModerationRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,

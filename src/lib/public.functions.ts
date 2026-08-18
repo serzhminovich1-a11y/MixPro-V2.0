@@ -23,13 +23,25 @@ export const getLeaderboard = createServerFn({ method: "GET" }).handler(async ()
 export const getProfileByUsername = createServerFn({ method: "GET" })
   .validator((input: { username: string }) => input)
   .handler(async ({ data: input }) => {
-    const { data, error } = await pub()
+    const s = pub();
+    // subscription_tier is deliberately not selected here — anon/authenticated
+    // were never granted column-level SELECT on it (unlike the rest of this
+    // list), so including it makes the whole query fail with "permission
+    // denied for table profiles" (Postgres column grants: any ungranted
+    // column in the list fails the entire SELECT, not just that field).
+    // This silently 404'd every public profile page before this fix.
+    const { data, error } = await s
       .from("profiles")
-      .select("id, username, avatar_url, xp, level, verified, subscription_tier, created_at, bio, full_name, socials")
+      .select("id, username, avatar_url, xp, level, verified, created_at, bio, full_name, socials")
       .ilike("username", input.username)
       .maybeSingle();
-    if (error) return { profile: null, error: error.message };
-    return { profile: data, error: null };
+    if (error) return { profile: null, error: error.message, followerCount: 0, followingCount: 0 };
+    if (!data) return { profile: null, error: null, followerCount: 0, followingCount: 0 };
+    const [followers, following] = await Promise.all([
+      s.from("user_follows").select("follower_id", { count: "exact", head: true }).eq("followed_id", data.id),
+      s.from("user_follows").select("followed_id", { count: "exact", head: true }).eq("follower_id", data.id),
+    ]);
+    return { profile: data, error: null, followerCount: followers.count ?? 0, followingCount: following.count ?? 0 };
   });
 
 export const searchUsernames = createServerFn({ method: "GET" })
