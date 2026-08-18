@@ -4,10 +4,12 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Plus, Trash2, Save, BookMarked, Image as ImageIcon, Film, Music, X, Pencil, Search, Upload } from "lucide-react";
 import { listGlossaryTerms, upsertGlossaryTerm, deleteGlossaryTerm, type GlossaryTerm, type TermMedia } from "@/lib/glossary.functions";
-import { uploadLessonAsset } from "@/lib/course-editor.functions";
 import { AdminTabs } from "@/components/admin-tabs";
 import { RoleGate } from "@/components/role-gate";
 import { ImageEditor } from "@/components/image-editor";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { uploadWithProgress, formatBytes } from "@/lib/upload-progress";
 
 export const Route = createFileRoute("/_authenticated/admin/glossary")({
   head: () => ({ meta: [{ title: "Библиотека терминов — админ — MixPro" }, { name: "robots", content: "noindex" }] }),
@@ -276,32 +278,36 @@ function MediaEditor({ media, setMedia }: { media: TermMedia[]; setMedia: (m: Te
 }
 
 function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: string; onChange: (u: string) => void; accept: string; placeholder: string }) {
-  const upload = useServerFn(uploadLessonAsset);
+  const { session } = useAuth();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressBytes, setProgressBytes] = useState({ loaded: 0, total: 0 });
   const [editing, setEditing] = useState<File | null>(null);
 
   async function doUpload(file: File | Blob, filename: string, contentType: string) {
-    if (file.size > 40 * 1024 * 1024) {
-      toast.error("Файл больше 40 МБ. Загрузите на внешний хост и вставьте URL.");
+    const userId = session?.user.id;
+    if (!userId) return;
+    // 200 MB matches lesson-assets' own bucket limit (see migration
+    // 20260818170000) — the upload itself goes straight from the browser
+    // to storage (uploadWithProgress), not through a request body, so
+    // there's no platform-level ceiling below that to worry about here.
+    if (file.size > 200 * 1024 * 1024) {
+      toast.error("Файл больше 200 МБ. Загрузите на внешний хост и вставьте URL.");
       return;
     }
     setBusy(true);
     setProgress(0);
+    setProgressBytes({ loaded: 0, total: file.size });
     try {
-      const buffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let bin = "";
-      const chunk = 0x8000;
-      for (let i = 0; i < bytes.length; i += chunk) {
-        bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
-        setProgress(Math.round((i / bytes.length) * 50));
-      }
-      const base64 = btoa(bin);
-      setProgress(70);
-      const r = await upload({ data: { filename, contentType: contentType || "application/octet-stream", base64 } });
-      setProgress(100);
-      onChange(r.url);
+      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${userId}/${Date.now()}-${safeName}`;
+      const { error } = await uploadWithProgress("lesson-assets", path, file, {
+        contentType: contentType || "application/octet-stream",
+        onProgress: (p) => { setProgress(p.percent); setProgressBytes({ loaded: p.loaded, total: p.total }); },
+      });
+      if (error) throw error;
+      const { data: pub } = supabase.storage.from("lesson-assets").getPublicUrl(path);
+      onChange(pub.publicUrl);
       toast.success("Загружено");
     } catch (e: any) {
       toast.error(e.message ?? "Ошибка загрузки");
@@ -337,7 +343,8 @@ function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: strin
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded bg-black/40 px-2 py-1 text-xs font-mono" />
       <div className="flex items-center gap-2">
         <label className="inline-flex cursor-pointer items-center gap-1 rounded border border-mint/40 bg-mint/10 px-2 py-1 text-[10px] text-mint hover:bg-mint/20">
-          <Upload className="h-3 w-3" /> {busy ? `Загрузка ${progress}%` : "С компьютера"}
+          <Upload className="h-3 w-3" />
+          {busy ? `${progress}% (${formatBytes(progressBytes.loaded)} / ${formatBytes(progressBytes.total)})` : "С компьютера"}
           <input type="file" accept={accept} className="hidden" disabled={busy}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
         </label>

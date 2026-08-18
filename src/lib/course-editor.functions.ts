@@ -142,11 +142,14 @@ export const uploadLessonAsset = createServerFn({ method: "POST" })
       .from("lesson-assets")
       .upload(path, buffer, { contentType: data.contentType, upsert: false });
     if (upErr) throw new Error(upErr.message);
-    const { data: signed, error: sErr } = await context.supabase.storage
-      .from("lesson-assets")
-      .createSignedUrl(path, 60 * 60 * 24 * 365 * 10); // 10 years
-    if (sErr || !signed) throw new Error(sErr?.message ?? "Не удалось получить ссылку");
-    return { url: signed.signedUrl, path };
+    // lesson-assets is a public bucket (see 20260818170000) — a plain
+    // public URL never expires, unlike the signed one this used to hand
+    // back. Note: whole files still go through this function's request
+    // body, so it's only really suitable for small assets — the file
+    // picker in the UI uses uploadWithProgress (direct browser→storage
+    // PUT) for anything of real size instead.
+    const { data: pub } = context.supabase.storage.from("lesson-assets").getPublicUrl(path);
+    return { url: pub.publicUrl, path };
   });
 
 /** Create a signed upload URL so the browser can PUT the file directly (with real progress). */
@@ -166,7 +169,7 @@ export const createLessonUploadUrl = createServerFn({ method: "POST" })
     return { path, token: signed.token, signedUrl: signed.signedUrl };
   });
 
-/** After a direct PUT succeeds, get a long-lived signed download URL. */
+/** After a direct PUT succeeds, get the (permanent, public) download URL. */
 export const finalizeLessonUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { path: string }) =>
@@ -174,9 +177,6 @@ export const finalizeLessonUpload = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { data: signed, error } = await context.supabase.storage
-      .from("lesson-assets")
-      .createSignedUrl(data.path, 60 * 60 * 24 * 365 * 10);
-    if (error || !signed) throw new Error(error?.message ?? "Не удалось получить ссылку");
-    return { url: signed.signedUrl };
+    const { data: pub } = context.supabase.storage.from("lesson-assets").getPublicUrl(data.path);
+    return { url: pub.publicUrl };
   });

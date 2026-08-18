@@ -10,10 +10,12 @@ import {
   deleteModule as delModule,
   upsertLesson,
   deleteLesson as delLesson,
-  uploadLessonAsset,
   createLessonUploadUrl,
   finalizeLessonUpload,
 } from "@/lib/course-editor.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { uploadWithProgress } from "@/lib/upload-progress";
 import {
   BLOCK_LABELS,
   newBlock,
@@ -1293,29 +1295,41 @@ function ToolBtn({ onClick, children, title }: { onClick: () => void; children: 
 /* ─────────── Media input (URL or upload) ─────────── */
 
 function MediaInput({ url, onUrl, accept, hint }: { url: string; onUrl: (u: string) => void; accept: string; hint: string }) {
+  const { session } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [editing, setEditing] = useState<File | null>(null);
-  const upload = useServerFn(uploadLessonAsset);
 
   async function doUpload(file: File | Blob, filename: string, contentType: string) {
-    if (file.size > 40 * 1024 * 1024) {
-      toast.error("Файл больше 40 МБ. Загрузите на внешний хост и вставьте URL.");
+    const userId = session?.user.id;
+    if (!userId) return;
+    // Goes straight from the browser to storage (uploadWithProgress), not
+    // through a request body — 200 MB matches lesson-assets' own bucket
+    // limit (20260818170000), there's no lower platform ceiling to worry
+    // about here the way there was with the old base64-through-a-server-
+    // function path.
+    if (file.size > 200 * 1024 * 1024) {
+      toast.error("Файл больше 200 МБ. Загрузите на внешний хост и вставьте URL.");
       return;
     }
     setBusy(true);
+    setProgress(0);
     try {
-      const buffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let bin = "";
-      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      const base64 = btoa(bin);
-      const r = await upload({ data: { filename, contentType: contentType || "application/octet-stream", base64 } });
-      onUrl(r.url);
+      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${userId}/${Date.now()}-${safeName}`;
+      const { error } = await uploadWithProgress("lesson-assets", path, file, {
+        contentType: contentType || "application/octet-stream",
+        onProgress: (p) => setProgress(p.percent),
+      });
+      if (error) throw error;
+      const { data: pub } = supabase.storage.from("lesson-assets").getPublicUrl(path);
+      onUrl(pub.publicUrl);
       toast.success("Загружено");
     } catch (e: any) {
       toast.error(e.message ?? "Ошибка загрузки");
     } finally {
       setBusy(false);
+      setTimeout(() => setProgress(0), 500);
     }
   }
 
@@ -1340,7 +1354,7 @@ function MediaInput({ url, onUrl, accept, hint }: { url: string; onUrl: (u: stri
       )}
       <input value={url} onChange={(e) => onUrl(e.target.value)} placeholder={hint} className="w-full rounded bg-black/40 px-2 py-1 text-sm" />
       <label className="inline-flex cursor-pointer items-center gap-2 rounded border border-mint/40 bg-mint/10 px-3 py-1.5 text-xs text-mint hover:bg-mint/20">
-        <Upload className="h-3.5 w-3.5" /> {busy ? "Загрузка…" : "Загрузить файл"}
+        <Upload className="h-3.5 w-3.5" /> {busy ? `Загрузка… ${progress}%` : "Загрузить файл"}
         <input type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
       </label>
     </div>

@@ -16,3 +16,17 @@ GRANT INSERT, UPDATE, DELETE ON public.lessons TO authenticated;
 -- itself was already fixed (lesson-assets storage), but saving the term
 -- afterwards (upsertGlossaryTerm) still hit the same missing-grant wall.
 GRANT INSERT, UPDATE, DELETE ON public.glossary_terms TO authenticated;
+
+-- lesson-assets was private, so every URL handed to a term/lesson had to
+-- be a *signed* URL with an expiry (10 years — see uploadLessonAsset) —
+-- baked directly into glossary_terms.media / lessons.content_blocks, not
+-- re-signed on read like avatars/wall are. Not actually permanent, and
+-- there's no "renew all the links before they expire" job. This content
+-- (lesson/glossary illustrations) isn't sensitive — the RLS read policy
+-- already only gated *unsigned* access anyway, a signed link bypasses it
+-- regardless — so making the bucket public and switching to plain public
+-- URLs (see app code) removes the expiry entirely instead of extending
+-- it further. Also raising the per-file limit for heavier uploads
+-- (screenshots, longer audio demos) now that uploads go straight to
+-- storage instead of through a request body.
+UPDATE storage.buckets SET public = true, file_size_limit = 209715200 WHERE id = 'lesson-assets';
