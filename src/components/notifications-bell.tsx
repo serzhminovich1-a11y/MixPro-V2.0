@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Bell, AtSign, MessagesSquare, Play, CheckCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,7 +24,9 @@ export function NotificationsBell() {
   const userId = session?.user.id ?? null;
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
@@ -50,10 +53,34 @@ export function NotificationsBell() {
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      // Panel is portaled to <body> (see render below) so it's not a DOM
+      // descendant of wrapRef anymore — check both.
+      if (wrapRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     };
     window.addEventListener("mousedown", onDoc);
     return () => window.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  // The nav toolbar strip this button lives in scrolls horizontally
+  // (overflow-x-auto), which per the CSS spec forces its overflow-y to
+  // "auto" too — an absolutely-positioned dropdown nested inside it gets
+  // clipped instead of extending below the header. Portal the panel to
+  // <body> instead and position it from the button's own screen position.
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const r = wrapRef.current?.getBoundingClientRect();
+      if (r) setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
   }, [open]);
 
   if (!userId) return null;
@@ -100,8 +127,12 @@ export function NotificationsBell() {
         )}
       </button>
 
-      {open && (
-        <div className="nav-dropdown absolute right-0 top-full z-50 mt-1 w-[340px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-popover shadow-xl">
+      {open && pos && createPortal(
+        <div
+          ref={panelRef}
+          style={{ position: "fixed", top: pos.top, right: pos.right }}
+          className="nav-dropdown z-50 w-[340px] max-w-[92vw] overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
+        >
           <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2 text-[11px]">
             <Bell className="h-3 w-3 text-mint" />
             <span className="font-semibold uppercase tracking-wider">Уведомления</span>
@@ -171,7 +202,8 @@ export function NotificationsBell() {
           >
             Все уведомления →
           </Link>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
