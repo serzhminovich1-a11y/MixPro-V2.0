@@ -1,4 +1,5 @@
-import { supabase } from "@/integrations/supabase/client";
+import { createUploadUrl, deleteStorageObject } from "@/lib/storage.functions";
+import { publicStorageUrl } from "@/lib/storage-url";
 
 export type UploadProgress = {
   loaded: number;
@@ -8,35 +9,37 @@ export type UploadProgress = {
 
 export type UploadOptions = {
   contentType?: string;
-  upsert?: boolean;
-  cacheControl?: string;
   onProgress?: (p: UploadProgress) => void;
 };
 
+export type StoragePrefix = "avatars" | "wall" | "presets" | "lesson-assets" | "game-loops";
+
 /**
- * Upload a file to Supabase Storage with real progress events.
- * Uses createSignedUploadUrl + XMLHttpRequest so we get `progress` events
- * (the JS SDK `.upload()` doesn't expose progress).
+ * Upload a file straight from the browser to Yandex Object Storage, with
+ * real progress events — asks the server for a short-lived presigned PUT
+ * URL (createUploadUrl, which also decides + returns the actual object
+ * path, since it embeds the caller's own id for ownership), then PUTs
+ * directly to Yandex via XMLHttpRequest so we get `progress` events (the
+ * fetch API doesn't expose upload progress). Never touches a server
+ * function's request body, so there's no platform body-size ceiling.
  */
 export async function uploadWithProgress(
-  bucket: string,
-  path: string,
+  prefix: StoragePrefix,
+  filename: string,
   file: Blob,
   opts: UploadOptions = {},
-): Promise<{ error: Error | null }> {
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUploadUrl(path, { upsert: opts.upsert ?? false });
-  if (error || !data) {
-    return { error: error ?? new Error("createSignedUploadUrl failed") };
+): Promise<{ error: Error | null; path?: string; url?: string }> {
+  let created: { path: string; uploadUrl: string };
+  try {
+    created = await createUploadUrl({ data: { prefix, filename } });
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
   }
 
   return await new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", data.signedUrl, true);
+    xhr.open("PUT", created.uploadUrl, true);
     if (opts.contentType) xhr.setRequestHeader("Content-Type", opts.contentType);
-    if (opts.cacheControl) xhr.setRequestHeader("Cache-Control", opts.cacheControl);
-    if (opts.upsert) xhr.setRequestHeader("x-upsert", "true");
 
     xhr.upload.onprogress = (e) => {
       if (!e.lengthComputable) return;
@@ -49,7 +52,7 @@ export async function uploadWithProgress(
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         opts.onProgress?.({ loaded: file.size, total: file.size, percent: 100 });
-        resolve({ error: null });
+        resolve({ error: null, path: created.path, url: publicStorageUrl(created.path) });
       } else {
         resolve({ error: new Error(`Upload failed: ${xhr.status} ${xhr.responseText}`) });
       }
@@ -57,6 +60,11 @@ export async function uploadWithProgress(
     xhr.onerror = () => resolve({ error: new Error("Network error during upload") });
     xhr.send(file);
   });
+}
+
+/** Delete one or more objects (best-effort — caller must own the path or moderate). */
+export async function removeStorageObjects(paths: string[]): Promise<void> {
+  await Promise.all(paths.map((path) => deleteStorageObject({ data: { path } }).catch(() => {})));
 }
 
 export function formatBytes(n: number): string {

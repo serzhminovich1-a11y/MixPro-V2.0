@@ -4,6 +4,8 @@ import { Loader2, Scissors, X, Save, Play, Pause } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { computePeaks, encodeWavSlice } from "@/lib/games/wav";
 import { listActiveLoops } from "@/lib/games/loops";
+import { uploadWithProgress, removeStorageObjects } from "@/lib/upload-progress";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 export type LoopEditorLoop = {
   id: string;
@@ -43,19 +45,17 @@ export function LoopEditor({ loop, onClose, onUpdated }: Props) {
     let alive = true;
     setLoadError(null);
     (async () => {
-      const { data, error } = await supabase.storage
-        .from("game-loops")
-        .createSignedUrl(loop.storage_path, 60 * 30);
-      if (error || !data?.signedUrl) {
+      const url = await resolveStorageUrl("gameLoops", loop.storage_path, "game-loops");
+      if (!url) {
         if (!alive) return;
         toast.error("Не удалось загрузить луп");
-        setLoadError(error?.message ?? "Файл недоступен в хранилище");
+        setLoadError("Файл недоступен в хранилище");
         return;
       }
       if (!alive) return;
-      setSignedUrl(data.signedUrl);
+      setSignedUrl(url);
       try {
-        const res = await fetch(data.signedUrl);
+        const res = await fetch(url);
         const ab = await res.arrayBuffer();
         const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         const ac = new AC();
@@ -186,17 +186,16 @@ export function LoopEditor({ loop, onClose, onUpdated }: Props) {
     try {
       const blob = encodeWavSlice(buffer, startSec, endSec);
       const cleanTitle = loop.title.replace(/[^\w.\-]+/g, "_");
-      const newPath = `${loop.category}/${Date.now()}_${cleanTitle}_trim.wav`;
-      const { error: upErr } = await supabase.storage
-        .from("game-loops")
-        .upload(newPath, blob, { contentType: "audio/wav", upsert: false });
-      if (upErr) throw upErr;
+      const { error: upErr, path: newPath } = await uploadWithProgress("game-loops", `${cleanTitle}_trim.wav`, blob, {
+        contentType: "audio/wav",
+      });
+      if (upErr || !newPath) throw upErr ?? new Error("Не удалось загрузить");
       const { error: updErr } = await supabase.from("game_loops")
         .update({ storage_path: newPath, duration_seconds: trimLen })
         .eq("id", loop.id);
       if (updErr) throw updErr;
       // remove old file (best-effort)
-      await supabase.storage.from("game-loops").remove([loop.storage_path]);
+      removeStorageObjects([loop.storage_path]);
       onUpdated({ storage_path: newPath, duration_seconds: trimLen });
       await listActiveLoops(true);
       toast.success(`Обрезано: ${trimLen.toFixed(2)}s`);

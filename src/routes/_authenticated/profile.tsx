@@ -14,7 +14,8 @@ import { TrackCard } from "@/components/track-card";
 import { AvatarEditor } from "@/components/avatar-editor";
 import { analyzeAudioFile, fileExt, isLossless, isLossy, type TrackAnalysis } from "@/lib/audio-analysis";
 import { leagueForXp, nextLeague, progressInLeague } from "@/lib/leagues";
-import { uploadWithProgress, formatBytes } from "@/lib/upload-progress";
+import { uploadWithProgress, removeStorageObjects, formatBytes } from "@/lib/upload-progress";
+import { resolveStorageUrl } from "@/lib/storage-url";
 import { SocialLinksEditor, parseSocials } from "@/components/social-links";
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -64,10 +65,7 @@ type WallPost = PostRow & {
 };
 
 async function signUrl(bucket: "avatars" | "wall", path: string): Promise<string | null> {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-  return data?.signedUrl ?? null;
+  return resolveStorageUrl(bucket, path, bucket);
 }
 
 type PendingTrack = {
@@ -250,26 +248,22 @@ function ProfilePage() {
   async function uploadAvatarBlob(blob: Blob) {
     if (!profile) return;
     setUploadingAvatar(true);
-    const path = `${user.id}/avatar-${Date.now()}.jpg`;
     const key = `avatar-${Date.now()}`;
     setUploads((u) => ({ ...u, [key]: { name: "Аватар", loaded: 0, total: blob.size } }));
-    const { error } = await uploadWithProgress("avatars", path, blob, {
-      upsert: true,
-      cacheControl: "3600",
+    const { error, path } = await uploadWithProgress("avatars", "avatar.jpg", blob, {
       contentType: "image/jpeg",
       onProgress: (p) => setUploads((u) => ({ ...u, [key]: { name: "Аватар", loaded: p.loaded, total: p.total } })),
     });
     setUploads((u) => { const { [key]: _, ...rest } = u; return rest; });
-    if (!error) {
-      if (profile.avatar_url && !profile.avatar_url.startsWith("http")) {
-        supabase.storage.from("avatars").remove([profile.avatar_url]).catch(() => {});
-      }
+    if (!error && path) {
+      const oldPath = profile.avatar_url;
       await supabase.from("profiles").update({ avatar_url: path }).eq("id", user.id);
+      if (oldPath) removeStorageObjects([oldPath]);
       const signed = await signUrl("avatars", path);
       setAvatarSigned(signed);
       setProfile({ ...profile, avatar_url: path });
     } else {
-      alert("Не удалось загрузить: " + error.message);
+      alert("Не удалось загрузить: " + (error?.message ?? "неизвестная ошибка"));
     }
     setUploadingAvatar(false);
     setPendingAvatar(null);
@@ -325,33 +319,28 @@ function ProfilePage() {
     const imageUrls: string[] = [];
     for (let i = 0; i < postImages.length; i++) {
       const f = postImages[i];
-      const ext = fileExt(f.name) || "bin";
-      const path = `${user.id}/${Date.now()}-img-${i}.${ext}`;
       const key = `img-${Date.now()}-${i}`;
       setUploads((u) => ({ ...u, [key]: { name: f.name, loaded: 0, total: f.size } }));
-      const { error } = await uploadWithProgress("wall", path, f, {
-        cacheControl: "3600",
+      const { error, path } = await uploadWithProgress("wall", f.name, f, {
         contentType: f.type || undefined,
         onProgress: (p) => setUploads((u) => ({ ...u, [key]: { name: f.name, loaded: p.loaded, total: p.total } })),
       });
       setUploads((u) => { const { [key]: _, ...rest } = u; return rest; });
-      if (!error) imageUrls.push(path);
+      if (!error && path) imageUrls.push(path);
     }
 
     const trackRecords: StoredTrack[] = [];
     for (let i = 0; i < pendingTracks.length; i++) {
       const t = pendingTracks[i];
       const ext = fileExt(t.file.name) || "bin";
-      const path = `${user.id}/${Date.now()}-track-${i}.${ext}`;
       const key = `trk-${Date.now()}-${i}`;
       setUploads((u) => ({ ...u, [key]: { name: t.file.name, loaded: 0, total: t.file.size } }));
-      const { error } = await uploadWithProgress("wall", path, t.file, {
-        cacheControl: "3600",
+      const { error, path } = await uploadWithProgress("wall", t.file.name, t.file, {
         contentType: t.file.type || undefined,
         onProgress: (p) => setUploads((u) => ({ ...u, [key]: { name: t.file.name, loaded: p.loaded, total: p.total } })),
       });
       setUploads((u) => { const { [key]: _, ...rest } = u; return rest; });
-      if (!error) {
+      if (!error && path) {
         trackRecords.push({
           path,
           label: t.label.trim() || `Версия ${i + 1}`,
@@ -392,7 +381,7 @@ function ProfilePage() {
     if (!confirm("Удалить пост?")) return;
     const post = posts.find((p) => p.id === postId);
     const paths = [...(post?.media_urls ?? []), ...(post?.tracks ?? []).map((t) => t.path)];
-    if (paths.length) supabase.storage.from("wall").remove(paths).catch(() => {});
+    if (paths.length) removeStorageObjects(paths);
     await supabase.from("posts").delete().eq("id", postId);
     setPosts((prev) => prev.filter((p) => p.id !== postId));
   }

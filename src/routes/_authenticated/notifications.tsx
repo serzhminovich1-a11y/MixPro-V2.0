@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell, Check, CheckCheck, Play, Trash2, AtSign, MessagesSquare, UserPlus, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { MentionText } from "@/lib/mentions";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 export const Route = createFileRoute("/_authenticated/notifications")({
   component: NotificationsPage,
@@ -37,10 +38,7 @@ export type NotificationRow = {
 };
 
 async function signAvatar(path: string | null): Promise<string | null> {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  const { data } = await supabase.storage.from("avatars").createSignedUrl(path, 3600);
-  return data?.signedUrl ?? null;
+  return resolveStorageUrl("avatars", path, "avatars");
 }
 
 export async function fetchNotifications(userId: string): Promise<NotificationRow[]> {

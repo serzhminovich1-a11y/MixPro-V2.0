@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { TrackPlayer, type PlayerTrack, type TrackPlayerHandle, type TrackPin } from "@/components/track-player";
 import { TrackCommentsPanel } from "@/components/track-comments";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 type Props = {
   postId: string;
@@ -56,14 +57,7 @@ export function TrackCard(props: Props) {
         .select("id, username, avatar_url")
         .in("id", authorIds);
       for (const a of authors ?? []) {
-        let signed: string | null = null;
-        if (a.avatar_url) {
-          if (a.avatar_url.startsWith("http")) signed = a.avatar_url;
-          else {
-            const { data: s } = await supabase.storage.from("avatars").createSignedUrl(a.avatar_url, 3600);
-            signed = s?.signedUrl ?? null;
-          }
-        }
+        const signed = await resolveStorageUrl("avatars", a.avatar_url, "avatars");
         authorMap.set(a.id, { username: a.username, avatar: signed });
       }
     }

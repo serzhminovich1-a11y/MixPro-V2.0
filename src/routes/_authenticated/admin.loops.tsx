@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 import { AdminTabs } from "@/components/admin-tabs";
 import { listActiveLoops, setPinnedLoopId, getPinnedLoopId } from "@/lib/games/loops";
+import { uploadWithProgress, removeStorageObjects } from "@/lib/upload-progress";
+import { resolveStorageUrl } from "@/lib/storage-url";
 import { LoopEditor } from "@/components/loop-editor";
 import { RoleGate } from "@/components/role-gate";
 
@@ -140,13 +142,11 @@ function AdminLoopsPage() {
       for (const file of arr) {
         setProgress(0);
         const duration = await decodeDuration(file);
-        const cleanName = file.name.replace(/[^\w.\-]+/g, "_");
-        const path = `${category}/${Date.now()}_${cleanName}`;
-        const { error: upErr } = await supabase.storage
-          .from("game-loops")
-          .upload(path, file, { contentType: file.type || "audio/wav", upsert: false });
-        if (upErr) throw upErr;
-        setProgress(70);
+        const { error: upErr, path } = await uploadWithProgress("game-loops", file.name, file, {
+          contentType: file.type || "audio/wav",
+          onProgress: (p) => setProgress(p.percent),
+        });
+        if (upErr || !path) throw upErr ?? new Error("Не удалось загрузить");
         const title = file.name.replace(/\.[^.]+$/, "");
         const { data: row, error: insErr } = await supabase
           .from("game_loops")
@@ -189,8 +189,7 @@ function AdminLoopsPage() {
 
   async function removeLoop(loop: Loop) {
     if (!confirm(`Удалить луп "${loop.title}"?`)) return;
-    const { error: sErr } = await supabase.storage.from("game-loops").remove([loop.storage_path]);
-    if (sErr) { toast.error(sErr.message); return; }
+    await removeStorageObjects([loop.storage_path]);
     const { error } = await supabase.from("game_loops").delete().eq("id", loop.id);
     if (error) { toast.error(error.message); return; }
     setLoops((prev) => prev.filter((l) => l.id !== loop.id));
@@ -203,12 +202,10 @@ function AdminLoopsPage() {
       setPlayingId(null);
       return;
     }
-    const { data, error } = await supabase.storage
-      .from("game-loops")
-      .createSignedUrl(loop.storage_path, 60 * 10);
-    if (error || !data?.signedUrl) { toast.error("Не удалось получить ссылку"); return; }
+    const url = await resolveStorageUrl("gameLoops", loop.storage_path, "game-loops");
+    if (!url) { toast.error("Не удалось получить ссылку"); return; }
     if (!audioRef.current) audioRef.current = new Audio();
-    audioRef.current.src = data.signedUrl;
+    audioRef.current.src = url;
     audioRef.current.onended = () => setPlayingId(null);
     try {
       await audioRef.current.play();

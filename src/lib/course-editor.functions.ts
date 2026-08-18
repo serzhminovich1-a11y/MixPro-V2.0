@@ -119,64 +119,8 @@ export const deleteLesson = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Upload a base64-encoded file to lesson-assets and return a 10-year signed URL. */
-export const uploadLessonAsset = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((input: { filename: string; contentType: string; base64: string }) =>
-    z.object({
-      filename: z.string().min(1).max(200),
-      contentType: z.string().min(1).max(120),
-      base64: z.string().min(1).max(60_000_000), // ~45 MB decoded
-    }).parse(input),
-  )
-  .handler(async ({ data, context }) => {
-    await assertModerator(context.supabase, context.userId);
-    // storage.objects has lesson_assets_write (FOR ALL, can_moderate()) and
-    // lesson_assets_read_published (moderators always pass) — no
-    // service-role client needed, which also means this works outside
-    // Lovable Cloud's own hosting.
-    const safeName = data.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${context.userId}/${Date.now()}-${safeName}`;
-    const buffer = Buffer.from(data.base64, "base64");
-    const { error: upErr } = await context.supabase.storage
-      .from("lesson-assets")
-      .upload(path, buffer, { contentType: data.contentType, upsert: false });
-    if (upErr) throw new Error(upErr.message);
-    // lesson-assets is a public bucket (see 20260818170000) — a plain
-    // public URL never expires, unlike the signed one this used to hand
-    // back. Note: whole files still go through this function's request
-    // body, so it's only really suitable for small assets — the file
-    // picker in the UI uses uploadWithProgress (direct browser→storage
-    // PUT) for anything of real size instead.
-    const { data: pub } = context.supabase.storage.from("lesson-assets").getPublicUrl(path);
-    return { url: pub.publicUrl, path };
-  });
-
-/** Create a signed upload URL so the browser can PUT the file directly (with real progress). */
-export const createLessonUploadUrl = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((input: { filename: string }) =>
-    z.object({ filename: z.string().min(1).max(200) }).parse(input),
-  )
-  .handler(async ({ data, context }) => {
-    await assertModerator(context.supabase, context.userId);
-    const safeName = data.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${context.userId}/${Date.now()}-${safeName}`;
-    const { data: signed, error } = await context.supabase.storage
-      .from("lesson-assets")
-      .createSignedUploadUrl(path);
-    if (error || !signed) throw new Error(error?.message ?? "Не удалось создать ссылку для загрузки");
-    return { path, token: signed.token, signedUrl: signed.signedUrl };
-  });
-
-/** After a direct PUT succeeds, get the (permanent, public) download URL. */
-export const finalizeLessonUpload = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((input: { path: string }) =>
-    z.object({ path: z.string().min(1).max(400) }).parse(input),
-  )
-  .handler(async ({ data, context }) => {
-    await assertModerator(context.supabase, context.userId);
-    const { data: pub } = context.supabase.storage.from("lesson-assets").getPublicUrl(data.path);
-    return { url: pub.publicUrl };
-  });
+// File uploads for lesson-assets moved to the shared Yandex Object Storage
+// helpers (src/lib/storage.functions.ts createUploadUrl + src/lib/
+// upload-progress.ts uploadWithProgress) — this file used to have its own
+// uploadLessonAsset/createLessonUploadUrl/finalizeLessonUpload trio doing
+// the same thing against Supabase Storage.

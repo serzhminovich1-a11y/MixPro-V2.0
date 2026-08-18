@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 const cache = new Map<string, string>();
 
@@ -8,8 +8,7 @@ export async function resolveAvatarUrl(path: string | null | undefined): Promise
   if (path.startsWith("http") || path.startsWith("data:") || path.startsWith("blob:")) return path;
   const cached = cache.get(path);
   if (cached) return cached;
-  const { data } = await supabase.storage.from("avatars").createSignedUrl(path, 3600);
-  const url = data?.signedUrl ?? null;
+  const url = await resolveStorageUrl("avatars", path, "avatars");
   if (url) cache.set(path, url);
   return url;
 }

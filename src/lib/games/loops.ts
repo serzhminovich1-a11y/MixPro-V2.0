@@ -6,6 +6,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { getAudioContext } from "@/lib/audio";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 export type LoopRow = {
   id: string;
@@ -43,11 +44,9 @@ export function getCachedLoops(): LoopRow[] {
 export async function decodeLoop(row: LoopRow): Promise<AudioBuffer> {
   const cached = bufferCache.get(row.id);
   if (cached) return cached;
-  const { data, error } = await supabase.storage
-    .from("game-loops")
-    .createSignedUrl(row.storage_path, 60 * 60);
-  if (error || !data?.signedUrl) throw error ?? new Error("signed url failed");
-  const res = await fetch(data.signedUrl);
+  const url = await resolveStorageUrl("gameLoops", row.storage_path, "game-loops");
+  if (!url) throw new Error("signed url failed");
+  const res = await fetch(url);
   const arr = await res.arrayBuffer();
   const ac = getAudioContext();
   const buf = await ac.decodeAudioData(arr);

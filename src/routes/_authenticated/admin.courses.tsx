@@ -10,10 +10,9 @@ import {
   deleteModule as delModule,
   upsertLesson,
   deleteLesson as delLesson,
-  createLessonUploadUrl,
-  finalizeLessonUpload,
 } from "@/lib/course-editor.functions";
-import { supabase } from "@/integrations/supabase/client";
+import { createUploadUrl } from "@/lib/storage.functions";
+import { publicStorageUrl } from "@/lib/storage-url";
 import { useAuth } from "@/hooks/use-auth";
 import { uploadWithProgress } from "@/lib/upload-progress";
 import {
@@ -826,8 +825,7 @@ function RichParagraphEditor({ block, update }: { block: Extract<Block, { type: 
   const [selectedImg, setSelectedImg] = useState<HTMLImageElement | null>(null);
   const [imgBox, setImgBox] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
 
-  const createUrl = useServerFn(createLessonUploadUrl);
-  const finalize = useServerFn(finalizeLessonUpload);
+  const createUrl = useServerFn(createUploadUrl);
 
   useEffect(() => {
     if (ref.current && ref.current.innerHTML !== block.html) ref.current.innerHTML = block.html;
@@ -1022,10 +1020,10 @@ function RichParagraphEditor({ block, update }: { block: Extract<Block, { type: 
     const id = crypto.randomUUID();
     setUploads((u) => [...u, { id, name: file.name, loaded: 0, total: file.size, pct: 0 }]);
     try {
-      const created = await createUrl({ data: { filename: file.name } });
+      const created = await createUrl({ data: { prefix: "lesson-assets", filename: file.name } });
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open("PUT", created.signedUrl, true);
+        xhr.open("PUT", created.uploadUrl, true);
         if (file.type) xhr.setRequestHeader("Content-Type", file.type);
         xhr.upload.onprogress = (e) => {
           if (!e.lengthComputable) return;
@@ -1036,7 +1034,7 @@ function RichParagraphEditor({ block, update }: { block: Extract<Block, { type: 
         xhr.onerror = () => reject(new Error("Ошибка сети"));
         xhr.send(file);
       });
-      const { url } = await finalize({ data: { path: created.path } });
+      const url = publicStorageUrl(created.path);
       let html = "";
       if (file.type.startsWith("image/")) html = `<p><img src="${url}" alt="${file.name}" /></p>`;
       else if (file.type.startsWith("video/")) html = `<p><video src="${url}" controls></video></p>`;
@@ -1315,15 +1313,12 @@ function MediaInput({ url, onUrl, accept, hint }: { url: string; onUrl: (u: stri
     setBusy(true);
     setProgress(0);
     try {
-      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${userId}/${Date.now()}-${safeName}`;
-      const { error } = await uploadWithProgress("lesson-assets", path, file, {
+      const { error, url } = await uploadWithProgress("lesson-assets", filename, file, {
         contentType: contentType || "application/octet-stream",
         onProgress: (p) => setProgress(p.percent),
       });
       if (error) throw error;
-      const { data: pub } = supabase.storage.from("lesson-assets").getPublicUrl(path);
-      onUrl(pub.publicUrl);
+      onUrl(url!);
       toast.success("Загружено");
     } catch (e: any) {
       toast.error(e.message ?? "Ошибка загрузки");

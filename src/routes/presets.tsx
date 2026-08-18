@@ -8,6 +8,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { PremiumBadge } from "@/components/premium-paywall";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
+import { resolveStorageUrl } from "@/lib/storage-url";
+import { uploadWithProgress } from "@/lib/upload-progress";
 
 
 const presetsQuery = queryOptions({ queryKey: ["presets"], queryFn: () => getPresets() });
@@ -48,8 +50,8 @@ function PresetsPage() {
     if (!preset.file_url) return;
     if ((preset as { is_premium?: boolean }).is_premium && !sub.active) return;
     await supabase.rpc("increment_downloads", { _preset_id: preset.id });
-    const { data: signed } = await supabase.storage.from("presets").createSignedUrl(preset.file_url, 300);
-    if (signed?.signedUrl) window.open(signed.signedUrl, "_blank");
+    const url = await resolveStorageUrl("presets", preset.file_url, "presets");
+    if (url) window.open(url, "_blank");
     queryClient.invalidateQueries({ queryKey: ["presets"] });
 
     router.invalidate();
@@ -170,9 +172,9 @@ function UploadModal({ onClose, userId }: { onClose: () => void; userId: string 
       let filePath: string | null = null;
       if (file) {
         if (file.size > 20 * 1024 * 1024) throw new Error("Файл больше 20 МБ.");
-        filePath = `${userId}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
-        const { error: upErr } = await supabase.storage.from("presets").upload(filePath, file);
+        const { error: upErr, path } = await uploadWithProgress("presets", file.name, file, { contentType: file.type });
         if (upErr) throw upErr;
+        filePath = path ?? null;
       }
       const { error: insErr } = await supabase.from("presets").insert({
         author_id: userId,

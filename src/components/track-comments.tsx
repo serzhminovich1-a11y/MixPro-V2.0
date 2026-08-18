@@ -5,6 +5,7 @@ import { EmojiTrigger } from "@/components/emoji-picker";
 import { MentionText, detectMentionQuery } from "@/lib/mentions";
 import { searchUsernames } from "@/lib/public.functions";
 import { AvatarImage } from "@/components/avatar-image";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 export type TrackCommentRow = {
   id: string;
@@ -33,10 +34,7 @@ const PAGE_SIZE = 5;
 const MAX_VISUAL_DEPTH = 5;
 
 async function signAvatar(path: string | null): Promise<string | null> {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  const { data } = await supabase.storage.from("avatars").createSignedUrl(path, 3600);
-  return data?.signedUrl ?? null;
+  return resolveStorageUrl("avatars", path, "avatars");
 }
 
 function fmt(ms: number): string {

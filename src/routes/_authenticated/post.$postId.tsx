@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { TrackCard } from "@/components/track-card";
 import type { PlayerTrack } from "@/components/track-player";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 const searchSchema = z.object({
   track: z.coerce.number().int().min(0).optional(),
@@ -30,11 +31,7 @@ export const Route = createFileRoute("/_authenticated/post/$postId")({
 });
 
 async function signWall(path: string): Promise<string | null> {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  const { data, error } = await supabase.storage.from("wall").createSignedUrl(path, 3600);
-  if (error) console.error("[post] failed to sign track URL", path, error.message);
-  return data?.signedUrl ?? null;
+  return resolveStorageUrl("wall", path, "wall");
 }
 
 function PostViewPage() {

@@ -7,7 +7,6 @@ import { listGlossaryTerms, upsertGlossaryTerm, deleteGlossaryTerm, type Glossar
 import { AdminTabs } from "@/components/admin-tabs";
 import { RoleGate } from "@/components/role-gate";
 import { ImageEditor } from "@/components/image-editor";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { uploadWithProgress, formatBytes } from "@/lib/upload-progress";
 
@@ -299,15 +298,12 @@ function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: strin
     setProgress(0);
     setProgressBytes({ loaded: 0, total: file.size });
     try {
-      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${userId}/${Date.now()}-${safeName}`;
-      const { error } = await uploadWithProgress("lesson-assets", path, file, {
+      const { error, url } = await uploadWithProgress("lesson-assets", filename, file, {
         contentType: contentType || "application/octet-stream",
         onProgress: (p) => { setProgress(p.percent); setProgressBytes({ loaded: p.loaded, total: p.total }); },
       });
       if (error) throw error;
-      const { data: pub } = supabase.storage.from("lesson-assets").getPublicUrl(path);
-      onChange(pub.publicUrl);
+      onChange(url!);
       toast.success("Загружено");
     } catch (e: any) {
       toast.error(e.message ?? "Ошибка загрузки");
