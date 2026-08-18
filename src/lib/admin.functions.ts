@@ -64,11 +64,16 @@ export const listUsers = createServerFn({ method: "POST" })
     const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, RANKS[r.role] ?? 0), 0);
     if (myRank < 2) throw new Error("Только для админов");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // profiles/user_roles/user_bans/user_certifications/certifications are
+    // all readable by the caller here anyway — profiles and the cert tables
+    // are publicly readable by RLS, and user_roles/user_bans grant full read
+    // to can_moderate() (myRank >= 2 already implies that). No service-role
+    // client needed, which also means this works outside Lovable Cloud's
+    // own hosting where that client isn't available at all.
     const limit = data.limit ?? 50;
     const offset = data.offset ?? 0;
     const sort = data.sort ?? "xp";
-    let q = supabaseAdmin
+    let q = context.supabase
       .from("profiles")
       .select("id, username, avatar_url, xp, level, created_at, verified, subscription_tier, subscription_until", { count: "exact" })
       .order(sort, { ascending: sort === "username" })
@@ -80,10 +85,10 @@ export const listUsers = createServerFn({ method: "POST" })
     if (ids.length === 0) return { users: [], myRank, total: count ?? 0 };
 
     const [rolesRes, bansRes, certsRes, certsListRes] = await Promise.all([
-      supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", ids),
-      supabaseAdmin.from("user_bans").select("user_id, reason, expires_at, created_at").in("user_id", ids),
-      supabaseAdmin.from("user_certifications").select("user_id, certification_id, awarded_at").in("user_id", ids),
-      supabaseAdmin.from("certifications").select("id, slug, name, color, icon"),
+      context.supabase.from("user_roles").select("user_id, role").in("user_id", ids),
+      context.supabase.from("user_bans").select("user_id, reason, expires_at, created_at").in("user_id", ids),
+      context.supabase.from("user_certifications").select("user_id, certification_id, awarded_at").in("user_id", ids),
+      context.supabase.from("certifications").select("id, slug, name, color, icon"),
     ]);
     const certMap = new Map((certsListRes.data ?? []).map((c) => [c.id, c]));
     const users = (profiles ?? []).map((p) => {
@@ -108,11 +113,15 @@ export const listUsers = createServerFn({ method: "POST" })
     return { users, myRank, total: count ?? 0 };
   });
 
-export const listCertifications = createServerFn({ method: "GET" }).handler(async () => {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data } = await supabaseAdmin.from("certifications").select("*").order("name");
-  return { certifications: data ?? [] };
-});
+export const listCertifications = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    // certifications is publicly readable by RLS — plain client is enough.
+    // (Only ever called from the authenticated admin page, so requiring
+    // auth here changes nothing for actual callers.)
+    const { data } = await context.supabase.from("certifications").select("*").order("name");
+    return { certifications: data ?? [] };
+  });
 
 /** Grant a role (admin/moderator). Ranked hierarchy enforced. */
 export const setRole = createServerFn({ method: "POST" })
@@ -312,7 +321,12 @@ export const getAdminStats = createServerFn({ method: "GET" })
     const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, RANKS[r.role] ?? 0), 0);
     if (myRank < 2) throw new Error("Только для админов");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Every table here already grants the calling admin/moderator full read
+    // via RLS (profiles is public; posts/forum_threads/chat_messages let
+    // can_moderate() see hidden rows too; reports lets can_moderate() see
+    // all of them) — myRank >= 2 above already implies can_moderate(), so
+    // no service-role client needed for these counts.
+    const supabase = context.supabase;
     const now = new Date();
     const dayAgo = new Date(now.getTime() - 86_400_000).toISOString();
     const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
@@ -320,15 +334,15 @@ export const getAdminStats = createServerFn({ method: "GET" })
       totalUsers, newUsers24h, newUsers7d, activeSubs,
       games24h, posts24h, threads24h, chat24h, openReports,
     ] = await Promise.all([
-      supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }),
-      supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
-      supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
-      supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).or(`subscription_tier.eq.lifetime,subscription_until.gt.${now.toISOString()}`),
-      supabaseAdmin.from("game_scores").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
-      supabaseAdmin.from("posts").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
-      supabaseAdmin.from("forum_threads").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
-      supabaseAdmin.from("chat_messages").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
-      supabaseAdmin.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
+      supabase.from("profiles").select("id", { count: "exact", head: true }),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).or(`subscription_tier.eq.lifetime,subscription_until.gt.${now.toISOString()}`),
+      supabase.from("game_scores").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabase.from("posts").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabase.from("forum_threads").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabase.from("chat_messages").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
     ]);
 
     return {
@@ -358,8 +372,9 @@ export const listAdminActions = createServerFn({ method: "POST" })
     const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, RANKS[r.role] ?? 0), 0);
     if (myRank < 1) throw new Error("Недостаточно прав");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    let q = supabaseAdmin
+    // admin_action_log_read_staff already grants can_moderate() full SELECT
+    // (myRank >= 1 above implies that) — no service-role client needed.
+    let q = context.supabase
       .from("admin_action_log")
       .select("*")
       .order("created_at", { ascending: false })
@@ -373,7 +388,7 @@ export const listAdminActions = createServerFn({ method: "POST" })
       ...(rows ?? []).map((r) => r.target_id).filter((id): id is string => !!id),
     ])];
     const { data: profiles } = ids.length
-      ? await supabaseAdmin.from("profiles").select("id, username").in("id", ids)
+      ? await context.supabase.from("profiles").select("id, username").in("id", ids)
       : { data: [] as { id: string; username: string }[] };
     const map = new Map((profiles ?? []).map((p) => [p.id, p.username]));
 

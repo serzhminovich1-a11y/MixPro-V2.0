@@ -82,8 +82,12 @@ export const recordGlossaryQuiz = createServerFn({ method: "POST" })
     z.object({ term_id: z.string().uuid(), correct: z.boolean() }).parse(input),
   )
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: existing } = await (supabaseAdmin as any)
+    // RLS on glossary_quiz_progress already scopes reads/writes to
+    // `auth.uid() = user_id`, and this handler only ever touches the
+    // caller's own row — no need for the service-role client here (which
+    // also isn't available outside Lovable Cloud's own hosting).
+    const supabase = context.supabase;
+    const { data: existing } = await (supabase as any)
       .from("glossary_quiz_progress")
       .select("*")
       .eq("user_id", context.userId)
@@ -97,22 +101,25 @@ export const recordGlossaryQuiz = createServerFn({ method: "POST" })
       last_seen_at: new Date().toISOString(),
     };
     const { error: progressError } = existing
-      ? await (supabaseAdmin as any).from("glossary_quiz_progress").update(patch).eq("id", existing.id)
-      : await (supabaseAdmin as any).from("glossary_quiz_progress").insert(patch);
+      ? await (supabase as any).from("glossary_quiz_progress").update(patch).eq("id", existing.id)
+      : await (supabase as any).from("glossary_quiz_progress").insert(patch);
     if (progressError) throw new Error(progressError.message);
     // Award XP only the first time this term is ever answered correctly —
     // the client already sees the full glossary (definitions included), so
     // `correct` can't be verified server-side; capping to a one-time reward
     // per term stops it from being farmed by resubmitting the same term.
+    // Goes through award_glossary_xp (SECURITY DEFINER, self-only) rather
+    // than a direct profiles write — best-effort: on a deployment where
+    // that migration hasn't landed yet, a quiz answer should still record
+    // instead of failing outright.
     const alreadyRewarded = (existing?.correct_count ?? 0) > 0;
     if (data.correct && !alreadyRewarded) {
-      const { data: prof } = await (supabaseAdmin as any).from("profiles").select("xp").eq("id", context.userId).maybeSingle();
-      const nextXp = (prof?.xp ?? 0) + 5;
-      const { error: xpError } = await (supabaseAdmin as any)
-        .from("profiles")
-        .update({ xp: nextXp, level: 1 + Math.floor(Math.sqrt(nextXp / 100)) })
-        .eq("id", context.userId);
-      if (xpError) throw new Error(xpError.message);
+      try {
+        const { error: xpError } = await supabase.rpc("award_glossary_xp", { _actor: context.userId, _amount: 5 });
+        if (xpError) throw xpError;
+      } catch {
+        /* XP award is best-effort; progress above is already saved */
+      }
     }
     return { ok: true };
   });

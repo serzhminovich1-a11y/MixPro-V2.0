@@ -1056,6 +1056,10 @@ export type Database = {
         Args: { _actor: string; _target: string; _verified: boolean }
         Returns: undefined
       }
+      award_glossary_xp: {
+        Args: { _actor: string; _amount: number }
+        Returns: undefined
+      }
       can_act_on: {
         Args: { _actor: string; _target: string }
         Returns: boolean
