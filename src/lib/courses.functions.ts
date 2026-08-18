@@ -90,10 +90,9 @@ export const saveCoursePositions = createServerFn({ method: "POST" })
     const { data: roles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
     const has = (roles ?? []).some((r: any) => ["admin", "super_admin", "moderator"].includes(r.role));
     if (!has) throw new Error("Только для модераторов и админов");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const failed: string[] = [];
     for (const p of data.positions) {
-      const { error } = await (supabaseAdmin as any).from("course_modules").update({ position_x: p.x, position_y: p.y }).eq("id", p.id);
+      const { error } = await (context.supabase as any).from("course_modules").update({ position_x: p.x, position_y: p.y }).eq("id", p.id);
       if (error) failed.push(p.id);
     }
     if (failed.length > 0) throw new Error(`Не удалось сохранить позиции: ${failed.length} из ${data.positions.length}`);

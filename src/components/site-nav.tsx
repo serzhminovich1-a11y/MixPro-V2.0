@@ -62,7 +62,7 @@ function toggleSidebar() {
 
 export function SiteNav() {
   const { session } = useAuth();
-  const { isAdmin, canModerate } = useAdmin();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -155,22 +155,14 @@ export function SiteNav() {
       case "view:fullscreen":
         toggleFullscreen();
         break;
-      case "opt:audio":
-        toast("Аудио настройки", { description: "Скоро добавим панель настроек" });
-        break;
       case "opt:profile":
         navigate({ to: "/profile" });
         break;
-      case "opt:moderation":
-        navigate({ to: "/moderation" });
+      case "opt:messages":
+        navigate({ to: "/messages" });
         break;
-      case "opt:admin":
-        navigate({ to: "/admin" });
-        break;
-      case "help:tour":
-        toast("Интерактивный тур", {
-          description: "Скоро мы проведём тебя по всем инструментам MixPro",
-        });
+      case "opt:notifications":
+        navigate({ to: "/notifications" });
         break;
       case "help:play":
         navigate({ to: "/games" });
@@ -222,9 +214,11 @@ export function SiteNav() {
                   )}
                   {label === "Вид" && (
                     <>
-                      <MenuItem onClick={() => menuAction("view:sidebar")}>
-                        Показать / скрыть браузер
-                      </MenuItem>
+                      {isAdmin && (
+                        <MenuItem onClick={() => menuAction("view:sidebar")}>
+                          Показать / скрыть браузер
+                        </MenuItem>
+                      )}
                       <MenuItem onClick={() => menuAction("view:fullscreen")}>
                         Полный экран
                       </MenuItem>
@@ -279,26 +273,13 @@ export function SiteNav() {
                       </MenuItem>
 
                       <MenuSep />
-                      <MenuItem onClick={() => menuAction("opt:audio")}>Аудио настройки</MenuItem>
-                      <MenuItem onClick={() => menuAction("opt:profile")}>Профиль</MenuItem>
-
-                      {canModerate && (
-                        <>
-                          <MenuSep />
-                          <MenuItem onClick={() => menuAction("opt:moderation")}>Модерация</MenuItem>
-                          {isAdmin && (
-                            <MenuItem onClick={() => menuAction("opt:admin")}>Админ-панель</MenuItem>
-                          )}
-                        </>
-                      )}
+                      <MenuItem onClick={() => menuAction("opt:profile")}>Профиль и пароль</MenuItem>
+                      <MenuItem onClick={() => menuAction("opt:messages")}>Сообщения</MenuItem>
+                      <MenuItem onClick={() => menuAction("opt:notifications")}>Уведомления</MenuItem>
                     </>
                   )}
                   {label === "Помощь" && (
                     <>
-                      <MenuItem onClick={() => menuAction("help:tour")}>
-                        Интерактивный тур
-                        <span className="nav-badge ml-2 is-on">скоро</span>
-                      </MenuItem>
                       <MenuItem onClick={() => menuAction("help:play")}>Как играть</MenuItem>
                       <MenuItem onClick={() => menuAction("help:telegram")}>
                         Telegram поддержка

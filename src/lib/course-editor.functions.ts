@@ -16,10 +16,9 @@ export const listCourseTree = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [mods, lessons] = await Promise.all([
-      supabaseAdmin.from("course_modules").select("*").order("order_index"),
-      supabaseAdmin
+      context.supabase.from("course_modules").select("*").order("order_index"),
+      context.supabase
         .from("lessons")
         .select("id, slug, title, category, difficulty, duration_min, module_id, order_index, xp_reward, is_published, updated_at, cover_url")
         .order("order_index"),
@@ -33,8 +32,7 @@ export const getLessonAdmin = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: lesson, error } = await supabaseAdmin.from("lessons").select("*").eq("id", data.id).maybeSingle();
+    const { data: lesson, error } = await context.supabase.from("lessons").select("*").eq("id", data.id).maybeSingle();
     if (error) throw new Error(error.message);
     return { lesson };
   });
@@ -59,11 +57,10 @@ export const upsertModule = createServerFn({ method: "POST" })
   .validator((input: z.infer<typeof ModuleInput>) => ModuleInput.parse(input))
   .handler(async ({ data, context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const payload = { ...data };
     const { data: out, error } = data.id
-      ? await supabaseAdmin.from("course_modules").update(payload).eq("id", data.id).select().maybeSingle()
-      : await supabaseAdmin.from("course_modules").insert(payload).select().maybeSingle();
+      ? await context.supabase.from("course_modules").update(payload).eq("id", data.id).select().maybeSingle()
+      : await context.supabase.from("course_modules").insert(payload).select().maybeSingle();
     if (error) throw new Error(error.message);
     return { module: out };
   });
@@ -73,10 +70,9 @@ export const deleteModule = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // Unlink lessons instead of cascading
-    await supabaseAdmin.from("lessons").update({ module_id: null }).eq("module_id", data.id);
-    const { error } = await supabaseAdmin.from("course_modules").delete().eq("id", data.id);
+    await context.supabase.from("lessons").update({ module_id: null }).eq("module_id", data.id);
+    const { error } = await context.supabase.from("course_modules").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -105,11 +101,10 @@ export const upsertLesson = createServerFn({ method: "POST" })
   .validator((input: z.infer<typeof LessonInput>) => LessonInput.parse(input))
   .handler(async ({ data, context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const payload: any = { ...data };
     const { data: out, error } = data.id
-      ? await supabaseAdmin.from("lessons").update(payload).eq("id", data.id).select().maybeSingle()
-      : await supabaseAdmin.from("lessons").insert(payload).select().maybeSingle();
+      ? await context.supabase.from("lessons").update(payload).eq("id", data.id).select().maybeSingle()
+      : await context.supabase.from("lessons").insert(payload).select().maybeSingle();
     if (error) throw new Error(error.message);
     return { lesson: out };
   });
@@ -119,8 +114,7 @@ export const deleteLesson = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("lessons").delete().eq("id", data.id);
+    const { error } = await context.supabase.from("lessons").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -137,15 +131,18 @@ export const uploadLessonAsset = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // storage.objects has lesson_assets_write (FOR ALL, can_moderate()) and
+    // lesson_assets_read_published (moderators always pass) — no
+    // service-role client needed, which also means this works outside
+    // Lovable Cloud's own hosting.
     const safeName = data.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${context.userId}/${Date.now()}-${safeName}`;
     const buffer = Buffer.from(data.base64, "base64");
-    const { error: upErr } = await supabaseAdmin.storage
+    const { error: upErr } = await context.supabase.storage
       .from("lesson-assets")
       .upload(path, buffer, { contentType: data.contentType, upsert: false });
     if (upErr) throw new Error(upErr.message);
-    const { data: signed, error: sErr } = await supabaseAdmin.storage
+    const { data: signed, error: sErr } = await context.supabase.storage
       .from("lesson-assets")
       .createSignedUrl(path, 60 * 60 * 24 * 365 * 10); // 10 years
     if (sErr || !signed) throw new Error(sErr?.message ?? "Не удалось получить ссылку");
@@ -160,10 +157,9 @@ export const createLessonUploadUrl = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const safeName = data.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${context.userId}/${Date.now()}-${safeName}`;
-    const { data: signed, error } = await supabaseAdmin.storage
+    const { data: signed, error } = await context.supabase.storage
       .from("lesson-assets")
       .createSignedUploadUrl(path);
     if (error || !signed) throw new Error(error?.message ?? "Не удалось создать ссылку для загрузки");
@@ -178,8 +174,7 @@ export const finalizeLessonUpload = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertModerator(context.supabase, context.userId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: signed, error } = await supabaseAdmin.storage
+    const { data: signed, error } = await context.supabase.storage
       .from("lesson-assets")
       .createSignedUrl(data.path, 60 * 60 * 24 * 365 * 10);
     if (error || !signed) throw new Error(error?.message ?? "Не удалось получить ссылку");
