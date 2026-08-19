@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { MessagesSquare, MessageSquare, Users, Clock } from "lucide-react";
-import { getForumCategories } from "@/lib/public.functions";
+import { MessagesSquare, Clock, Pin, BarChart3, Rss } from "lucide-react";
+import { getForumCategories, getForumActivity } from "@/lib/public.functions";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
 const catsQuery = queryOptions({ queryKey: ["forum-categories"], queryFn: () => getForumCategories() });
+const activityQuery = queryOptions({ queryKey: ["forum-activity"], queryFn: () => getForumActivity() });
 
 export const Route = createFileRoute("/forum/")({
   head: () => ({
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/forum/")({
   }),
   loader: ({ context }) => {
     context.queryClient.ensureQueryData(catsQuery);
+    context.queryClient.ensureQueryData(activityQuery);
   },
   component: ForumIndex,
   errorComponent: RouteError,
@@ -35,13 +37,16 @@ function timeAgo(iso: string) {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
-/** One clickable forum/subforum row — icon, name+description, stats, last post. */
+/** One clickable forum row — icon, name+description, stats, last post. This
+ * is always a real forum (has its own threads), never a bare group label —
+ * see ForumIndex for how top-level "section" categories (which just group
+ * these, like the reference's "Основной раздел") render separately. */
 function ForumRow({ c }: { c: Cat }) {
   return (
     <Link
       to="/forum/$category"
       params={{ category: c.slug }}
-      className="grid grid-cols-[auto_1fr] items-center gap-3 px-4 py-3 transition-colors hover:bg-foreground/[0.03] sm:grid-cols-[auto_1fr_auto_16rem]"
+      className="grid grid-cols-[auto_1fr] items-center gap-3 px-4 py-3 transition-colors hover:bg-foreground/[0.03] sm:grid-cols-[auto_1fr_auto_15rem]"
     >
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-secondary text-xl">{c.icon ?? "💬"}</span>
       <div className="min-w-0">
@@ -71,6 +76,69 @@ function ForumRow({ c }: { c: Cat }) {
   );
 }
 
+function RecentActivityWidget() {
+  const { data } = useSuspenseQuery(activityQuery);
+  return (
+    <div className="panel overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-black/50 bg-black/20 px-3 py-2.5">
+        <Rss className="h-3.5 w-3.5 text-cyan" />
+        <h2 className="text-xs font-bold uppercase tracking-wide text-foreground">Последние сообщения</h2>
+      </div>
+      {data.recent.length === 0 ? (
+        <p className="px-3 py-6 text-center text-xs text-muted-foreground">Пока тихо.</p>
+      ) : (
+        <ul className="divide-y divide-border/50">
+          {data.recent.map((t) => (
+            <li key={t.id}>
+              <Link to="/forum/thread/$id" params={{ id: t.id }} className="flex gap-2.5 px-3 py-2.5 transition-colors hover:bg-foreground/[0.03]">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-[11px] font-bold text-mint">
+                  {(t.author?.username ?? "A")[0].toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1 truncate text-xs font-medium text-foreground/90">
+                    {t.is_pinned && <Pin className="h-3 w-3 shrink-0 text-mint" />}
+                    {t.title}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    От: <span className="text-foreground/70">{t.author?.username ?? "Аноним"}</span> · {timeAgo(t.last_activity_at)}
+                  </p>
+                  {t.category && <p className="mt-0.5 truncate text-[10px] text-cyan/80">{t.category.name}</p>}
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function StatsWidget() {
+  const { data } = useSuspenseQuery(activityQuery);
+  return (
+    <div className="panel overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-black/50 bg-black/20 px-3 py-2.5">
+        <BarChart3 className="h-3.5 w-3.5 text-mint" />
+        <h2 className="text-xs font-bold uppercase tracking-wide text-foreground">Статистика форума</h2>
+      </div>
+      <dl className="grid grid-cols-3 divide-x divide-border/50 text-center">
+        <div className="px-2 py-3">
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Тем</dt>
+          <dd className="mt-0.5 font-mono text-sm font-bold text-foreground">{data.stats.threads.toLocaleString("ru-RU")}</dd>
+        </div>
+        <div className="px-2 py-3">
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Сообщ.</dt>
+          <dd className="mt-0.5 font-mono text-sm font-bold text-foreground">{data.stats.posts.toLocaleString("ru-RU")}</dd>
+        </div>
+        <div className="px-2 py-3">
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Участн.</dt>
+          <dd className="mt-0.5 font-mono text-sm font-bold text-foreground">{data.stats.members.toLocaleString("ru-RU")}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
 function ForumIndex() {
   const { data } = useSuspenseQuery(catsQuery);
   const cats = data.categories as Cat[];
@@ -82,11 +150,9 @@ function ForumIndex() {
     byParent.set(key, arr);
   }
   const topLevel = (byParent.get(null) ?? []).slice().sort((a, b) => a.order_index - b.order_index);
-  const totalThreads = cats.reduce((n, c) => n + c.thread_count, 0);
-  const totalPosts = cats.reduce((n, c) => n + c.post_count, 0);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-14">
+    <div className="mx-auto max-w-6xl px-4 py-14">
       <div className="flex items-center gap-3">
         <div className="grid h-9 w-9 place-items-center rounded-lg bg-cyan/10 text-cyan">
           <MessagesSquare className="h-4 w-4" />
@@ -98,40 +164,42 @@ function ForumIndex() {
         Тематические обсуждения — микс, мастеринг, железо, барахолка, оффтоп.
       </p>
 
-      <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg border border-border/60 bg-card/30 px-4 py-2.5 font-mono text-[11px] text-muted-foreground">
-        <span className="flex items-center gap-1.5"><MessageSquare className="h-3 w-3" /> {totalThreads} тем</span>
-        <span className="flex items-center gap-1.5"><MessagesSquare className="h-3 w-3" /> {totalPosts} сообщений</span>
-        <span className="flex items-center gap-1.5"><Users className="h-3 w-3" /> {cats.length} разделов</span>
-      </div>
-
-      <div className="mt-6 space-y-5">
-        {topLevel.map((parent) => {
-          const children = (byParent.get(parent.id) ?? []).slice().sort((a, b) => a.order_index - b.order_index);
-          // No subforums under it — it holds threads directly, so it's just
-          // its own row, not a section header repeating the same name.
-          if (children.length === 0) {
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_20rem]">
+        {/* Main: category tree. A top-level category with subforums is a
+            bold section label grouping its children (real forums, each with
+            their own stats); a childless top-level category is just its own
+            forum row — same "no duplicate name" rule as before. */}
+        <div className="min-w-0 space-y-5">
+          {topLevel.map((parent) => {
+            const children = (byParent.get(parent.id) ?? []).slice().sort((a, b) => a.order_index - b.order_index);
+            if (children.length === 0) {
+              return (
+                <section key={parent.id} className="panel overflow-hidden">
+                  <ForumRow c={parent} />
+                </section>
+              );
+            }
             return (
               <section key={parent.id} className="panel overflow-hidden">
-                <ForumRow c={parent} />
+                <div className="flex items-center gap-2 border-b border-black/50 bg-black/20 px-4 py-2">
+                  <span className="text-xs font-bold uppercase tracking-wide text-foreground">{parent.name}</span>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {children.map((c) => <ForumRow key={c.id} c={c} />)}
+                </div>
               </section>
             );
-          }
-          return (
-            <section key={parent.id} className="panel overflow-hidden">
-              <div className="flex items-center gap-2 border-b border-black/50 bg-black/20 px-4 py-2.5">
-                <span className="text-base leading-none">{parent.icon ?? "📁"}</span>
-                <h2 className="text-sm font-bold tracking-wide text-foreground">{parent.name}</h2>
-                {parent.description && <span className="hidden truncate text-xs text-muted-foreground sm:inline">— {parent.description}</span>}
-              </div>
-              <div className="divide-y divide-border/50">
-                {children.map((c) => <ForumRow key={c.id} c={c} />)}
-              </div>
-            </section>
-          );
-        })}
-        {topLevel.length === 0 && (
-          <p className="py-10 text-center text-sm text-muted-foreground">Разделов пока нет.</p>
-        )}
+          })}
+          {topLevel.length === 0 && (
+            <p className="py-10 text-center text-sm text-muted-foreground">Разделов пока нет.</p>
+          )}
+        </div>
+
+        {/* Sidebar: recent activity + stats — the "won't get unwieldy" part */}
+        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+          <RecentActivityWidget />
+          <StatsWidget />
+        </aside>
       </div>
     </div>
   );

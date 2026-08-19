@@ -185,6 +185,48 @@ export const getForumCategories = createServerFn({ method: "GET" }).handler(asyn
   };
 });
 
+/** Sidebar widgets for the forum homepage — a site-wide "latest posts"
+ * feed (not per-category) plus overall counters. The single thing a dense,
+ * many-category forum needs that a plain category list doesn't give you:
+ * one place to see everything new without opening each section. */
+export const getForumActivity = createServerFn({ method: "GET" }).handler(async () => {
+  const s = pub();
+  const [threadsRes, usersRes] = await Promise.all([
+    s
+      .from("forum_threads")
+      .select("id, title, category_id, author_id, is_pinned, last_activity_at")
+      .eq("is_hidden", false)
+      .order("last_activity_at", { ascending: false })
+      .limit(8),
+    s.from("profiles").select("id", { count: "exact", head: true }),
+  ]);
+  const threads = threadsRes.data ?? [];
+  const catIds = [...new Set(threads.map((t) => t.category_id))];
+  const authorIds = [...new Set(threads.map((t) => t.author_id))];
+  const [catsRes, profilesRes, allThreadsRes] = await Promise.all([
+    catIds.length ? s.from("forum_categories").select("id, slug, name").in("id", catIds) : Promise.resolve({ data: [] as { id: string; slug: string; name: string }[] }),
+    authorIds.length ? s.from("profiles").select("id, username, avatar_url").in("id", authorIds) : Promise.resolve({ data: [] as { id: string; username: string; avatar_url: string | null }[] }),
+    s.from("forum_threads").select("id", { count: "exact", head: true }).eq("is_hidden", false),
+  ]);
+  const catMap = new Map((catsRes.data ?? []).map((c) => [c.id, c]));
+  const profileMap = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
+  const repliesRes = await s.from("forum_replies").select("id", { count: "exact", head: true }).eq("is_hidden", false);
+  const threadTotal = allThreadsRes.count ?? 0;
+  const replyTotal = repliesRes.count ?? 0;
+
+  return {
+    recent: threads.map((t) => ({
+      ...t,
+      category: catMap.get(t.category_id) ?? null,
+      author: profileMap.get(t.author_id) ?? null,
+    })),
+    // "Posts" = every original topic post + every reply, same convention
+    // as the per-category post_count in getForumCategories.
+    stats: { threads: threadTotal, posts: threadTotal + replyTotal, members: usersRes.count ?? 0 },
+    error: null,
+  };
+});
+
 export const getForumCategoryBySlug = createServerFn({ method: "GET" })
   .validator((input: { slug: string }) => input)
   .handler(async ({ data: input }) => {
