@@ -80,73 +80,9 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
   // *this* when a select's onChange runs.
   const savedRangeRef = useRef<Range | null>(null);
 
-  // TEMPORARY diagnostics for the Brave "can't place the caret" report —
-  // remove once root-caused. Logs to console only; no user-visible effect.
-  const t0 = useRef(performance.now());
-  function dbg(label: string, extra?: unknown) {
-    // eslint-disable-next-line no-console
-    console.log(`[RTE-DEBUG +${(performance.now() - t0.current).toFixed(0)}ms] ${label}`, extra ?? "");
-  }
-  function describeEl(el: Element | null) {
-    if (!el) return null;
-    const title = el.getAttribute?.("title");
-    return `${el.tagName}${el.id ? "#" + el.id : ""}${title ? `[title="${title}"]` : ""}${(el as HTMLElement).className ? "." + String((el as HTMLElement).className).replace(/\s+/g, ".") : ""}`;
-  }
-  function describeSel() {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return { none: true };
-    return {
-      collapsed: sel.isCollapsed,
-      anchorOffset: sel.anchorOffset,
-      anchorNode: sel.anchorNode?.nodeType === 3 ? `"${sel.anchorNode.textContent?.slice(0, 30)}"` : describeEl(sel.anchorNode as Element | null),
-      activeElement: describeEl(document.activeElement as Element | null),
-    };
-  }
-
   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== value) {
-      dbg("mount-effect: writing innerHTML from value prop");
-      ref.current.innerHTML = value;
-    }
+    if (ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = value;
     setSourceValue(value);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // TEMPORARY: whenever focus lands on ANY <button>, log which one (title
-  // identifies it exactly) plus a stack trace — if a stack shows up, some
-  // JS called .focus() and we can see exactly what; an empty/native-only
-  // stack means it's the browser itself doing this, not our code.
-  useEffect(() => {
-    function onFocusIn(e: FocusEvent) {
-      const t = e.target as HTMLElement;
-      if (t?.tagName === "BUTTON") {
-        dbg("GLOBAL focusin -> BUTTON", describeEl(t));
-        // eslint-disable-next-line no-console
-        console.trace("[RTE-DEBUG] stack at focus-steal");
-      }
-    }
-    document.addEventListener("focusin", onFocusIn, true);
-    return () => document.removeEventListener("focusin", onFocusIn, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // TEMPORARY: the focusin trace above only shows one collapsed minified
-  // frame — intercept the actual .focus() call site instead. If some JS
-  // is calling button.focus(), this logs its real (still-minified, but
-  // multi-frame) stack; if focus moves to the button WITHOUT ever going
-  // through this, it's native browser behavior, not application code.
-  useEffect(() => {
-    const proto = HTMLElement.prototype;
-    const orig = proto.focus;
-    proto.focus = function (this: HTMLElement, ...args: unknown[]) {
-      if (this.tagName === "BUTTON") {
-        dbg("HTMLElement.prototype.focus() called on BUTTON", describeEl(this));
-        // eslint-disable-next-line no-console
-        console.trace("[RTE-DEBUG] .focus() call stack");
-      }
-      return (orig as (...a: unknown[]) => void).apply(this, args);
-    };
-    return () => { proto.focus = orig; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -157,10 +93,7 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
   // blank even though the parent's `value` is correct. Do the write here
   // instead, once the div actually exists again.
   useEffect(() => {
-    if (!sourceMode && ref.current) {
-      dbg("sourceMode-effect: writing innerHTML from sourceValue");
-      ref.current.innerHTML = sourceValue;
-    }
+    if (!sourceMode && ref.current) ref.current.innerHTML = sourceValue;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceMode]);
 
@@ -173,19 +106,16 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
     // is exactly the kind of thing that behaves differently across
     // Chromium builds. Defer to the next frame so none of this runs
     // until after the browser has already fully committed the click's
-    // own caret placement — reported as caret placement needing several
-    // clicks to "take" in Brave (not reproducible in stock Chromium).
+    // own caret placement.
     let raf = 0;
     function poll() {
-      dbg("selectionchange (raw event)", describeSel());
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         if (!ref.current) return;
         const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) { dbg("poll(rAF): no selection"); return; }
+        if (!sel || sel.rangeCount === 0) return;
         const anchor = sel.anchorNode;
-        if (!anchor || !ref.current.contains(anchor)) { dbg("poll(rAF): selection outside editor", describeSel()); return; }
-        dbg("poll(rAF): captured", describeSel());
+        if (!anchor || !ref.current.contains(anchor)) return;
         if (!sel.isCollapsed) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
         try {
           const fb = document.queryCommandValue("formatBlock");
@@ -364,14 +294,14 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
         onFocus={(e) => {
           // Toolbar <button>s never legitimately hold focus in this editor
           // — every deliberate click already sends it straight back to the
-          // editor (exec()'s restoreSelection). Confirmed on Brave: right
-          // after an ordinary click *in the text itself*, focus lands on
-          // the first button here anyway, with no HTMLElement.focus() call
-          // anywhere in the stack (checked directly) — i.e. the browser
-          // moving it natively, not any application code. Root cause not
-          // pinned down; this undoes it unconditionally instead. Scoped to
-          // <button> only — the <select>s and color <input>s in this same
-          // toolbar genuinely need to keep focus while the user is using them.
+          // editor (exec()'s restoreSelection). On some Chromium builds
+          // (confirmed on Brave) focus can land on the first button here
+          // right after an ordinary click *in the text itself*, with no
+          // application code calling .focus() anywhere — the browser
+          // moving it natively. Enforce the invariant directly rather than
+          // chase the exact native cause. Scoped to <button> only — the
+          // <select>s and color <input>s in this same toolbar genuinely
+          // need to keep focus while the user is using them.
           if (e.target instanceof HTMLButtonElement) ref.current?.focus();
         }}
       >
@@ -482,11 +412,7 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
           contentEditable
           suppressContentEditableWarning
           onInput={commit}
-          onBlur={(e) => { commit(); dbg("blur", { relatedTarget: describeEl(e.relatedTarget as Element | null) }); }}
-          onFocus={(e) => dbg("focus", { relatedTarget: describeEl((e as any).relatedTarget ?? null) })}
-          onMouseDown={(e) => dbg("mousedown", { x: e.clientX, y: e.clientY, target: describeEl(e.target as Element) })}
-          onMouseUp={() => dbg("mouseup-selection", describeSel())}
-          onClick={() => dbg("click-selection", describeSel())}
+          onBlur={commit}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
