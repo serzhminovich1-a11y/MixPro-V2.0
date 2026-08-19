@@ -60,11 +60,15 @@ export const aiEditText = createServerFn({ method: "POST" })
       messages: [{ role: "user", content: userText }],
     });
 
-    const html = msg.content
+    let html = msg.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("")
       .trim();
+    // The system prompt explicitly says no markdown/code fences, but models
+    // wrap output in ```html ... ``` often enough anyway that this can't be
+    // left to the prompt alone — strip it defensively if present.
+    html = html.replace(/^```(?:html)?\s*\n?/i, "").replace(/\n?```\s*$/, "").trim();
     if (!html) throw new Error("Пустой ответ от ИИ");
     return { html };
   });
