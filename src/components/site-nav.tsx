@@ -7,6 +7,7 @@ import {
   Gamepad2,
   GraduationCap,
   SlidersHorizontal,
+  MessagesSquare,
   MessageCircle,
   Play,
   Square,
@@ -40,10 +41,10 @@ const tools = [
 
   { to: "/glossary", label: "Термины", icon: BookMarked },
   { to: "/presets", label: "Пресеты", icon: SlidersHorizontal },
-  // "Форум" pulled from the nav by request — the pages/data stay as-is,
-  // just unreachable from here. Re-add `{ to: "/forum", label: "Форум",
-  // icon: MessagesSquare },` to bring it back.
-  { to: "/chat", label: "Чат", icon: MessageCircle },
+  // Back in the nav, but greyed out / not clickable — "в следующем
+  // обновлении" — until Форум and Чат are actually ready to ship.
+  { to: "/forum", label: "Форум", icon: MessagesSquare, disabled: true },
+  { to: "/chat", label: "Чат", icon: MessageCircle, disabled: true },
 ] as const;
 
 const MENU_LABELS = ["Файл", "Вид", "Опции", "Помощь"] as const;
@@ -323,6 +324,19 @@ export function SiteNav() {
 
         <nav className="flex items-center gap-1">
           {tools.map((t) => {
+            if ("disabled" in t && t.disabled) {
+              return (
+                <span
+                  key={t.to}
+                  title="Будет доступно в следующем обновлении"
+                  aria-disabled="true"
+                  className="nav-tool-btn inline-flex cursor-not-allowed items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider opacity-40 grayscale"
+                >
+                  <t.icon className="h-3 w-3" />
+                  <span className="hidden sm:inline">{t.label}</span>
+                </span>
+              );
+            }
             const active = pathname === t.to || pathname.startsWith(t.to + "/");
             return (
               <Link
