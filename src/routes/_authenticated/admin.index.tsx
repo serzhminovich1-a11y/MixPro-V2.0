@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
   Shield, Crown, Search, Zap, Ban, ShieldCheck, Award,
-  UserX, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Clock, Infinity as InfinityIcon,
+  UserX, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Clock,
   FileSpreadsheet, BadgeCheck,
 } from "lucide-react";
 import { exportUsersXlsx } from "@/lib/admin-export.functions";
@@ -422,9 +422,9 @@ function AdminPage() {
                       {isSelf ? "Ты не можешь применять действия к самому себе." : "Ранг этого пользователя не ниже твоего — действия недоступны."}
                     </p>
                   ) : (
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-2">
                       {/* Roles */}
-                      <section>
+                      <section className="rounded-lg border border-border/60 bg-background/40 p-3">
                         <h4 className="label-mono">Роли</h4>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {(["teacher", "moderator", "admin", "super_admin"] as const).map((r) => {
@@ -432,66 +432,56 @@ function AdminPage() {
                             const rankNeeded = { teacher: 1, moderator: 2, admin: 3, super_admin: 4 }[r];
                             const canGrant = myRank >= rankNeeded;
                             return (
-                              <button
+                              <label
                                 key={r}
-                                disabled={!canGrant}
-                                onClick={() => run(() => _setRole({ data: { targetId: u.id, role: r, grant: !has } }), has ? "Роль снята" : "Роль выдана")}
-                                className={`rounded border px-2 py-1 text-[10px] font-bold uppercase tracking-wider disabled:opacity-30 ${
-                                  has ? "border-destructive/50 bg-destructive/20 text-destructive" : "border-mint/50 bg-mint/10 text-mint hover:bg-mint/20"
-                                }`}
+                                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
+                                  canGrant ? "cursor-pointer" : "cursor-not-allowed opacity-30"
+                                } ${has ? "border-mint/40 bg-mint/10 text-mint" : "border-border text-muted-foreground hover:text-foreground"}`}
                               >
-                                {has ? "− " : "+ "}{ROLE_LABEL[r]}
-                              </button>
+                                <input
+                                  type="checkbox"
+                                  checked={has}
+                                  disabled={!canGrant}
+                                  onChange={() => run(() => _setRole({ data: { targetId: u.id, role: r, grant: !has } }), has ? "Роль снята" : "Роль выдана")}
+                                  className="h-3.5 w-3.5 accent-mint"
+                                />
+                                {ROLE_LABEL[r]}
+                              </label>
                             );
                           })}
                         </div>
                       </section>
 
                       {/* Verification */}
-                      <section>
+                      <section className="rounded-lg border border-border/60 bg-background/40 p-3">
                         <h4 className="label-mono">Верификация</h4>
-                        <button
-                          onClick={() => run(() => _setVerified({ data: { targetId: u.id, verified: !u.verified } }), u.verified ? "Верификация снята" : "Верификация выдана")}
-                          className={`mt-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-                            u.verified ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-200" : "border-border hover:bg-secondary"
-                          }`}
-                        >
-                          <BadgeCheck className="h-3.5 w-3.5" />
-                          {u.verified ? "Снять галочку" : "Выдать галочку"}
-                        </button>
-                      </section>
-
-                      {/* XP */}
-                      <section>
-                        <h4 className="label-mono">XP</h4>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {[-500, -100, +100, +500, +2000].map((d) => (
-                            <button
-                              key={d}
-                              onClick={() => run(() => _xp({ data: { targetId: u.id, delta: d } }), `XP ${d > 0 ? "+" : ""}${d}`)}
-                              className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-bold ${
-                                d > 0 ? "border-mint/50 bg-mint/10 text-mint" : "border-destructive/40 bg-destructive/10 text-destructive"
-                              }`}
-                            >
-                              <Zap className="h-3 w-3" /> {d > 0 ? `+${d}` : d}
-                            </button>
-                          ))}
-                          <XpCustom onSubmit={(v) => run(() => _xp({ data: { targetId: u.id, delta: v } }), `XP ${v > 0 ? "+" : ""}${v}`)} />
+                        <div className="mt-2">
+                          <Toggle
+                            checked={!!u.verified}
+                            onChange={() => run(() => _setVerified({ data: { targetId: u.id, verified: !u.verified } }), u.verified ? "Верификация снята" : "Верификация выдана")}
+                            label={u.verified ? "Верифицирован" : "Не верифицирован"}
+                          />
                         </div>
                       </section>
 
+                      {/* XP */}
+                      <section className="rounded-lg border border-border/60 bg-background/40 p-3">
+                        <h4 className="label-mono">XP · Lvl {u.level}</h4>
+                        <XpEditor onApply={(delta) => run(() => _xp({ data: { targetId: u.id, delta } }), `XP ${delta > 0 ? "+" : ""}${delta}`)} />
+                      </section>
+
                       {/* Ban */}
-                      <section>
+                      <section className="rounded-lg border border-border/60 bg-background/40 p-3">
                         <h4 className="label-mono">Бан</h4>
                         {u.ban ? (
                           <div className="mt-2 space-y-2">
-                            <p className="rounded bg-destructive/10 p-2 text-[11px] text-destructive">
-                              <strong>Причина:</strong> {u.ban.reason}
+                            <p className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-[11px] text-muted-foreground">
+                              <span className="text-destructive">{u.ban.reason}</span>
                               {u.ban.expires_at && <> · до {new Date(u.ban.expires_at).toLocaleDateString("ru-RU")}</>}
                             </p>
                             <button
                               onClick={() => run(() => _unban({ data: { targetId: u.id } }), "Разбанен")}
-                              className="inline-flex items-center gap-1 rounded bg-mint/20 px-2 py-1 text-[10px] font-bold text-mint"
+                              className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:border-mint/50 hover:text-mint"
                             >
                               <ShieldCheck className="h-3 w-3" /> Разбанить
                             </button>
@@ -502,7 +492,7 @@ function AdminPage() {
                       </section>
 
                       {/* Certs */}
-                      <section>
+                      <section className="rounded-lg border border-border/60 bg-background/40 p-3 md:col-span-2">
                         <h4 className="label-mono">Сертификации</h4>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {certs.map((c) => {
@@ -513,7 +503,7 @@ function AdminPage() {
                                 onClick={() => run(() => _cert({ data: { targetId: u.id, certificationId: c.id, grant: !has } }), has ? "Сертификат снят" : "Сертификат выдан")}
                                 className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition-opacity"
                                 style={{
-                                  borderColor: c.color,
+                                  borderColor: has ? c.color : `${c.color}55`,
                                   color: has ? "#0a0a0a" : c.color,
                                   background: has ? c.color : "transparent",
                                 }}
@@ -527,71 +517,42 @@ function AdminPage() {
                       </section>
 
                       {/* Subscription */}
-                      <section className="md:col-span-2">
+                      <section className="rounded-lg border border-border/60 bg-background/40 p-3 md:col-span-2">
                         <h4 className="label-mono flex items-center gap-1.5">
                           <Clock className="h-3 w-3" /> Подписка / время пользования
                         </h4>
-                        <div className="mt-2 rounded-lg border border-black/60 bg-black/20 p-3">
-                          <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                            <span className="text-muted-foreground">Тариф:</span>
-                            <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${TIER_COLORS[u.subscription_tier] ?? TIER_COLORS.free}`}>
-                              {TIER_LABEL[u.subscription_tier] ?? u.subscription_tier}
-                            </span>
-                            <span className="text-muted-foreground">·</span>
-                            <span className="text-muted-foreground">Действует до:</span>
-                            <span className={subActive(u) ? "text-mint font-mono" : "text-destructive font-mono"}>
-                              {u.subscription_tier === "lifetime" ? "∞ навсегда" : fmtDate(u.subscription_until)}
-                            </span>
-                            {subActive(u) ? (
-                              <span className="rounded bg-mint/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mint">Активна</span>
-                            ) : (
-                              <span className="rounded bg-secondary px-1.5 py-0.5 text-[9px] font-bold uppercase text-muted-foreground">Не активна</span>
-                            )}
-                          </div>
 
-                          <div className="mt-3">
-                            <p className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Продлить (добавить время)</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {[7, 30, 90, 180, 365].map((d) => (
-                                <button
-                                  key={d}
-                                  onClick={() => run(() => _extendSub({ data: { targetId: u.id, days: d, tier: "pro" } }), `+${d} дней PRO`)}
-                                  className="inline-flex items-center gap-1 rounded border border-mint/40 bg-mint/10 px-2 py-1 text-[10px] font-bold text-mint hover:bg-mint/20"
-                                >
-                                  <Clock className="h-3 w-3" /> +{d} дн
-                                </button>
-                              ))}
-                              <ExtendCustom onSubmit={(days) => run(() => _extendSub({ data: { targetId: u.id, days, tier: "pro" } }), `+${days} дней PRO`)} />
-                            </div>
-                          </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-muted-foreground">Тариф:</span>
+                          <span className="font-semibold">{TIER_LABEL[u.subscription_tier] ?? u.subscription_tier}</span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground">действует до:</span>
+                          <span className="font-mono">{u.subscription_tier === "lifetime" ? "∞ навсегда" : fmtDate(u.subscription_until)}</span>
+                          <span className={`inline-flex items-center gap-1.5 text-[10px] ${subActive(u) ? "text-mint" : "text-muted-foreground"}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${subActive(u) ? "bg-mint" : "bg-muted-foreground/50"}`} aria-hidden="true" />
+                            {subActive(u) ? "активна" : "не активна"}
+                          </span>
+                        </div>
 
-                          <div className="mt-3">
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <p className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Продлить</p>
+                            <ExtendEditor onApply={(days) => run(() => _extendSub({ data: { targetId: u.id, days, tier: "pro" } }), `+${days} дней PRO`)} />
+                          </div>
+                          <div>
                             <p className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Установить тариф</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              <button
-                                onClick={() => run(() => _setSub({ data: { targetId: u.id, tier: "free", until: null } }), "Тариф: Free")}
-                                className="inline-flex items-center gap-1 rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-[10px] font-bold text-destructive"
-                              >
-                                <UserX className="h-3 w-3" /> Сбросить (Free)
-                              </button>
-                              <button
-                                onClick={() => run(() => _extendSub({ data: { targetId: u.id, days: 14, tier: "trial" } }), "Trial 14 дн")}
-                                className="inline-flex items-center gap-1 rounded border border-cyan/40 bg-cyan/10 px-2 py-1 text-[10px] font-bold text-cyan"
-                              >
-                                <Sparkles className="h-3 w-3" /> Trial 14 дн
-                              </button>
-                              <button
-                                onClick={() => run(() => _setSub({ data: { targetId: u.id, tier: "lifetime", until: null } }), "Lifetime ∞")}
-                                className="inline-flex items-center gap-1 rounded border border-yellow-400/40 bg-yellow-400/10 px-2 py-1 text-[10px] font-bold text-yellow-300"
-                              >
-                                <InfinityIcon className="h-3.5 w-3.5" /> Lifetime
-                              </button>
-                            </div>
-                            <p className="mt-2 text-[10px] text-muted-foreground">
-                              Заглушка под будущую систему подписок — сейчас просто хранит тариф и срок для каждого пользователя.
-                            </p>
+                            <TierSetter
+                              onApply={(choice) => {
+                                if (choice === "free") run(() => _setSub({ data: { targetId: u.id, tier: "free", until: null } }), "Тариф: Free");
+                                else if (choice === "trial") run(() => _extendSub({ data: { targetId: u.id, days: 14, tier: "trial" } }), "Trial 14 дн");
+                                else run(() => _setSub({ data: { targetId: u.id, tier: "lifetime", until: null } }), "Lifetime ∞");
+                              }}
+                            />
                           </div>
                         </div>
+                        <p className="mt-2 text-[10px] text-muted-foreground">
+                          Заглушка под будущую систему подписок — сейчас просто хранит тариф и срок для каждого пользователя.
+                        </p>
                       </section>
                     </div>
                   )}
@@ -631,27 +592,68 @@ function AdminPage() {
   );
 }
 
-function XpCustom({ onSubmit }: { onSubmit: (v: number) => void }) {
-  const [v, setV] = useState("");
+/** Neutral on/off switch — used in place of a colored button for binary
+ * state (verification). One accent color regardless of what it controls;
+ * the label text carries the meaning, never the color alone. */
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        const n = parseInt(v, 10);
-        if (!Number.isFinite(n) || n === 0) return;
-        onSubmit(n);
-        setV("");
-      }}
-      className="flex items-center gap-1"
+    <button
+      type="button"
+      onClick={onChange}
+      className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
+        checked ? "border-mint/40 bg-mint/10 text-mint" : "border-border text-muted-foreground hover:text-foreground"
+      }`}
     >
-      <input
-        value={v}
-        onChange={(e) => setV(e.target.value)}
-        placeholder="±"
-        className="w-16 rounded border border-input bg-background px-2 py-1 text-[10px] outline-none"
-      />
-      <button className="rounded border border-black/60 bg-secondary px-2 py-1 text-[10px] font-bold">OK</button>
-    </form>
+      <span className={`relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors ${checked ? "bg-mint" : "bg-secondary"}`}>
+        <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-background transition-transform ${checked ? "translate-x-3.5" : "translate-x-0.5"}`} />
+      </span>
+      {label}
+    </button>
+  );
+}
+
+/** Single number input + apply/remove buttons, with small preset chips that
+ * just pre-fill the input rather than firing immediately — replaces a row
+ * of 5 differently-colored one-shot buttons with one deliberate control. */
+function XpEditor({ onApply }: { onApply: (delta: number) => void }) {
+  const [v, setV] = useState("100");
+  const n = parseInt(v, 10) || 0;
+  return (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          className="w-24 rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono outline-none focus:ring-1 focus:ring-ring"
+        />
+        <button
+          disabled={n === 0}
+          onClick={() => onApply(Math.abs(n))}
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:border-mint/50 hover:text-mint disabled:opacity-30"
+        >
+          <Zap className="h-3 w-3" /> Начислить
+        </button>
+        <button
+          disabled={n === 0}
+          onClick={() => onApply(-Math.abs(n))}
+          className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:border-destructive/50 hover:text-destructive disabled:opacity-30"
+        >
+          Списать
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {[100, 500, 2000].map((p) => (
+          <button
+            key={p}
+            onClick={() => setV(String(p))}
+            className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:border-mint/40 hover:text-mint"
+          >
+            {p.toLocaleString()}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -673,7 +675,7 @@ function BanForm({ onSubmit }: { onSubmit: (reason: string, days?: number) => vo
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Причина..."
-        className="w-full rounded border border-input bg-background px-2 py-1 text-[11px] outline-none"
+        className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
       />
       <div className="flex items-center gap-1.5">
         <input
@@ -681,36 +683,75 @@ function BanForm({ onSubmit }: { onSubmit: (reason: string, days?: number) => vo
           value={days}
           onChange={(e) => setDays(e.target.value ? Number(e.target.value) : "")}
           placeholder="Дней (пусто = навсегда)"
-          className="w-40 rounded border border-input bg-background px-2 py-1 text-[10px] outline-none"
+          className="w-40 rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
         />
-        <button className="inline-flex items-center gap-1 rounded bg-destructive/20 px-2 py-1 text-[10px] font-bold text-destructive">
-          <Ban className="h-3 w-3" /> Забанить
+        <button className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/20">
+          <Ban className="h-3 w-3" /> Заблокировать
         </button>
       </div>
     </form>
   );
 }
 
-function ExtendCustom({ onSubmit }: { onSubmit: (days: number) => void }) {
-  const [v, setV] = useState("");
+/** Tier dropdown + one confirm button, instead of 3 separately-colored
+ * one-shot buttons (Free/Trial/Lifetime). */
+function TierSetter({ onApply }: { onApply: (choice: "free" | "trial" | "lifetime") => void }) {
+  const [choice, setChoice] = useState<"free" | "trial" | "lifetime">("trial");
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        const n = parseInt(v, 10);
-        if (!Number.isFinite(n) || n <= 0) return;
-        onSubmit(n);
-        setV("");
-      }}
-      className="flex items-center gap-1"
-    >
-      <input
-        value={v}
-        onChange={(e) => setV(e.target.value)}
-        placeholder="дней"
-        className="w-20 rounded border border-input bg-background px-2 py-1 text-[10px] outline-none"
-      />
-      <button className="rounded border border-mint/40 bg-mint/10 px-2 py-1 text-[10px] font-bold text-mint">+ Добавить</button>
-    </form>
+    <div className="flex items-center gap-1.5">
+      <select
+        value={choice}
+        onChange={(e) => setChoice(e.target.value as "free" | "trial" | "lifetime")}
+        className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+      >
+        <option value="free">Free</option>
+        <option value="trial">Trial · 14 дней</option>
+        <option value="lifetime">Lifetime · навсегда</option>
+      </select>
+      <button
+        onClick={() => onApply(choice)}
+        className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:border-mint/50 hover:text-mint"
+      >
+        Применить
+      </button>
+    </div>
+  );
+}
+
+/** Days-to-extend input + presets that pre-fill it, instead of 5 one-shot
+ * buttons plus a separate custom-days form. */
+function ExtendEditor({ onApply }: { onApply: (days: number) => void }) {
+  const [v, setV] = useState("30");
+  const n = parseInt(v, 10) || 0;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          className="w-20 rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono outline-none focus:ring-1 focus:ring-ring"
+        />
+        <span className="text-[10px] text-muted-foreground">дней</span>
+        <button
+          disabled={n <= 0}
+          onClick={() => onApply(n)}
+          className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:border-mint/50 hover:text-mint disabled:opacity-30"
+        >
+          <Clock className="h-3 w-3" /> Продлить PRO
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {[7, 30, 90, 365].map((p) => (
+          <button
+            key={p}
+            onClick={() => setV(String(p))}
+            className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:border-mint/40 hover:text-mint"
+          >
+            {p} дн
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
