@@ -210,7 +210,7 @@ function NotificationsPage() {
               >
                 <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-secondary text-xs font-bold text-mint">
                   {n.actor?.avatarSigned ? (
-                    <img src={n.actor.avatarSigned} className="h-full w-full object-cover" alt="" />
+                    <img src={n.actor.avatarSigned} className="h-full w-full object-cover" alt="" loading="lazy" />
                   ) : (
                     (n.actor?.username ?? "?")[0]?.toUpperCase() ?? "?"
                   )}

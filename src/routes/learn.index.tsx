@@ -221,7 +221,7 @@ function LearnPage() {
                     >
 
                       {mod.cover_url ? (
-                        <img src={mod.cover_url} alt="" className="h-full w-full object-cover" />
+                        <img src={mod.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-muted-foreground">
                           <ImageIcon className="h-6 w-6" />

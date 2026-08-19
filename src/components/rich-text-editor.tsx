@@ -297,7 +297,7 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
       });
       const url = publicStorageUrl(created.path);
       let html = "";
-      if (file.type.startsWith("image/")) html = `<p><img src="${url}" alt="${file.name}" /></p>`;
+      if (file.type.startsWith("image/")) html = `<p><img src="${url}" alt="${file.name}" loading="lazy" /></p>`;
       else if (file.type.startsWith("video/")) html = `<p><video src="${url}" controls></video></p>`;
       else if (file.type.startsWith("audio/")) html = `<p><audio src="${url}" controls></audio></p>`;
       else html = `<p><a href="${url}" target="_blank" rel="noopener noreferrer">📎 ${file.name} (${formatBytes(file.size)})</a></p>`;

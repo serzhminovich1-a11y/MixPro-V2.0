@@ -340,7 +340,7 @@ function CommentNode({
     <div>
       <div className="group flex gap-2">
         <div className={`grid ${avatarSize} shrink-0 place-items-center overflow-hidden rounded-full bg-secondary text-[10px] font-bold text-mint`}>
-          {row.author?.avatarSigned ? <img src={row.author.avatarSigned} className="h-full w-full object-cover" alt="" /> : (row.author?.username ?? "?")[0].toUpperCase()}
+          {row.author?.avatarSigned ? <img src={row.author.avatarSigned} className="h-full w-full object-cover" alt="" loading="lazy" /> : (row.author?.username ?? "?")[0].toUpperCase()}
         </div>
         <div className={`min-w-0 flex-1 rounded-lg ${bubbleTone} px-3 py-2`}>
           <div className={`flex items-center gap-2 ${nameSize}`}>

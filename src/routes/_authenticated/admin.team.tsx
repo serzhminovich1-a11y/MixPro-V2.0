@@ -131,7 +131,7 @@ function AdminTeamPage() {
               <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
                   {m.avatar_url ? (
-                    <img src={m.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+                    <img src={m.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" loading="lazy" />
                   ) : (
                     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold text-muted-foreground">
                       {m.username?.[0]?.toUpperCase() ?? "?"}

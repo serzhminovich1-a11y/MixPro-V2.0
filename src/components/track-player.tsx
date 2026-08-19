@@ -681,7 +681,7 @@ export const TrackPlayer = forwardRef<TrackPlayerHandle, Props>(function TrackPl
                     aria-label={`Комментарий в ${Math.floor(p.ms / 1000)}s`}
                     title={p.content}
                   >
-                    {p.avatar ? <img src={p.avatar} alt="" className="h-full w-full object-cover" /> : initials}
+                    {p.avatar ? <img src={p.avatar} alt="" className="h-full w-full object-cover" loading="lazy" /> : initials}
                   </button>
                 );
               })}

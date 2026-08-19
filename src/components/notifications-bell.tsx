@@ -171,7 +171,7 @@ export function NotificationsBell() {
                       >
                         <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-secondary text-[10px] font-bold text-mint">
                           {n.actor?.avatarSigned ? (
-                            <img src={n.actor.avatarSigned} className="h-full w-full object-cover" alt="" />
+                            <img src={n.actor.avatarSigned} className="h-full w-full object-cover" alt="" loading="lazy" />
                           ) : (
                             (n.actor?.username ?? "?")[0]?.toUpperCase() ?? "?"
                           )}

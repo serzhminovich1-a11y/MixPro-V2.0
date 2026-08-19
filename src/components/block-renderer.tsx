@@ -39,7 +39,7 @@ function RenderBlock({ block: b }: { block: Block }) {
       return (
         <figure className={`block ${alignClass}`} style={{ width: `${b.width ?? 100}%` }}>
           {b.url ? (
-            <img src={b.url} alt={b.caption ?? ""} className="w-full rounded-xl border border-black/40" />
+            <img src={b.url} alt={b.caption ?? ""} className="w-full rounded-xl border border-black/40" loading="lazy" />
           ) : (
             <div className="rounded-xl border border-dashed border-black/40 p-8 text-center text-xs text-muted-foreground">Нет URL картинки</div>
           )}

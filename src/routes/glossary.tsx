@@ -235,7 +235,7 @@ function MediaRender({ m }: { m: TermMedia }) {
   if (m.kind === "image" || m.kind === "gif") {
     return (
       <figure>
-        <img src={m.url} alt={m.caption ?? ""} className="w-full rounded-lg border border-black/40" />
+        <img src={m.url} alt={m.caption ?? ""} className="w-full rounded-lg border border-black/40" loading="lazy" />
         {m.caption && <figcaption className="mt-1 text-xs text-muted-foreground">{m.caption}</figcaption>}
       </figure>
     );

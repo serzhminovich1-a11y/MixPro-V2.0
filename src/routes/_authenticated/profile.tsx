@@ -1102,7 +1102,7 @@ function WallRow(props: {
         {/* Cover */}
         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-secondary">
           {cover ? (
-            <img src={cover} alt="" className="h-full w-full object-cover" />
+            <img src={cover} alt="" className="h-full w-full object-cover" loading="lazy" />
           ) : (
             <div className="grid h-full w-full place-items-center text-muted-foreground">
               <Music4 className="h-5 w-5" />
@@ -1202,7 +1202,7 @@ function WallRow(props: {
           {post.imagesSigned.length > (post.playerTracks.length > 0 ? 1 : 0) && (
             <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3">
               {post.imagesSigned.slice(1).map((url, i) => (
-                <img key={i} src={url} alt="" className="w-full rounded-lg border border-border object-cover" />
+                <img key={i} src={url} alt="" className="w-full rounded-lg border border-border object-cover" loading="lazy" />
               ))}
             </div>
           )}
@@ -1225,7 +1225,7 @@ function WallCard(props: { post: WallPost; onOpen: () => void; onLike: () => voi
     <article className="glass group flex flex-col overflow-hidden rounded-2xl">
       <button type="button" onClick={onOpen} className="relative block aspect-square w-full overflow-hidden bg-secondary">
         {cover ? (
-          <img src={cover} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+          <img src={cover} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-105" loading="lazy" />
         ) : (
           <div className="grid h-full w-full place-items-center text-muted-foreground">
             <Music4 className="h-10 w-10" />
