@@ -3,10 +3,13 @@
 -- can grant to specific people on top of their existing role (e.g. a
 -- trusted teacher who should manage ALL courses, not just their own; an
 -- admin who should see the finance dashboard without being made
--- super-admin). Same pattern as super_admin itself, added the same way
--- (20260721193626): ALTER TYPE ... ADD VALUE, nothing else references the
--- new value in this same migration.
-ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'teacher';
+-- super-admin).
+--
+-- The enum extension itself (ALTER TYPE app_role ADD VALUE 'teacher') is
+-- now its own migration (20260819120000) — must run and commit before
+-- this one, since Postgres can't use a freshly added enum label in the
+-- same transaction that added it (hit this live: "unsafe use of new
+-- value ... must be committed before they can be used").
 
 -- 1) Ownership tracking, needed for "teachers manage their own courses".
 --    Nullable — existing rows predate this and have no known author.
