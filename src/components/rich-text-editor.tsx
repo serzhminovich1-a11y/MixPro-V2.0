@@ -359,7 +359,22 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
 
   return (
     <div className="space-y-2">
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 rounded-xl border border-white/10 bg-[#0f0f0f]/95 p-2 text-xs backdrop-blur">
+      <div
+        className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 rounded-xl border border-white/10 bg-[#0f0f0f]/95 p-2 text-xs backdrop-blur"
+        onFocus={(e) => {
+          // Toolbar <button>s never legitimately hold focus in this editor
+          // — every deliberate click already sends it straight back to the
+          // editor (exec()'s restoreSelection). Confirmed on Brave: right
+          // after an ordinary click *in the text itself*, focus lands on
+          // the first button here anyway, with no HTMLElement.focus() call
+          // anywhere in the stack (checked directly) — i.e. the browser
+          // moving it natively, not any application code. Root cause not
+          // pinned down; this undoes it unconditionally instead. Scoped to
+          // <button> only — the <select>s and color <input>s in this same
+          // toolbar genuinely need to keep focus while the user is using them.
+          if (e.target instanceof HTMLButtonElement) ref.current?.focus();
+        }}
+      >
         <ToolBtn onClick={() => exec("undo")} title="Отменить"><Undo2 className="h-4 w-4" /></ToolBtn>
         <ToolBtn onClick={() => exec("redo")} title="Вернуть"><Redo2 className="h-4 w-4" /></ToolBtn>
         <Divider />
