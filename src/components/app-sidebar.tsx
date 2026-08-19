@@ -22,6 +22,7 @@ import {
   Library,
   Waves,
   ShieldAlert,
+  ShieldCheck,
   Bell,
   Crown,
   CreditCard,
@@ -37,7 +38,8 @@ type Group = {
   adminOnly?: boolean;
   superOnly?: boolean;
   teacherOnly?: boolean;
-  tone?: "admin" | "super" | "teacher";
+  moderatorOnly?: boolean;
+  tone?: "admin" | "super" | "teacher" | "moderator";
 };
 
 const groups: Group[] = [
@@ -56,6 +58,25 @@ const groups: Group[] = [
       { label: "Библиотека лупов", to: "/admin/loops", icon: Waves, badge: "ADM" },
       { label: "Категории форума", to: "/admin/forum", icon: MessagesSquare, badge: "ADM" },
       { label: "Модерация", to: "/moderation", icon: ShieldAlert, badge: "ADM" },
+    ],
+  },
+  {
+    // Plain moderators (rank 1, not also admin+) previously had no sidebar
+    // entries at all despite already having real RoleGate access to these
+    // five pages — content moderation/editing tools specifically, not the
+    // admin-only ones (Пользователи/Дашборд/Глоссарий/Библиотека лупов
+    // need rank >= 2) or super-admin-only ones. Surfacing what's already
+    // theirs, not widening any actual permission.
+    label: "Moderator · Studio",
+    icon: Folder,
+    moderatorOnly: true,
+    tone: "moderator",
+    items: [
+      { label: "Модерация", to: "/moderation", icon: ShieldAlert, badge: "MOD" },
+      { label: "Журнал действий", to: "/admin/log", icon: ScrollText, badge: "MOD" },
+      { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "MOD" },
+      { label: "Категории форума", to: "/admin/forum", icon: MessagesSquare, badge: "MOD" },
+      { label: "Команда", to: "/admin/team", icon: UserCog, badge: "MOD" },
     ],
   },
   {
@@ -129,7 +150,7 @@ function writeGroupState(value: Record<string, boolean>) {
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { isAdmin, isSuperAdmin, isTeacher, ready } = useAdmin();
+  const { isAdmin, isSuperAdmin, isTeacher, canModerate, ready } = useAdmin();
   const [collapsed, setCollapsed] = useState<boolean>(() => readCollapsed());
   const [open, setOpen] = useState<Record<string, boolean>>(() => readGroupState());
 
@@ -159,14 +180,15 @@ export function AppSidebar() {
   const visible = groups.filter((g) => {
     if (g.superOnly) return ready && isSuperAdmin;
     if (g.adminOnly) return ready && isAdmin;
-    // Once someone is admin+, the plain teacher shortcut group is redundant
-    // — "Курсы · редактор" is already in Admin · Studio for them.
+    // Once someone is admin+, the plain teacher/moderator shortcut groups
+    // are redundant — everything in them is already in Admin · Studio.
     if (g.teacherOnly) return ready && isTeacher && !isAdmin;
+    if (g.moderatorOnly) return ready && canModerate && !isAdmin;
     return true;
   });
 
   // Sidebar is a staff-only control surface. Hide for everyone else.
-  if (!ready || (!isAdmin && !isSuperAdmin && !isTeacher) || visible.length === 0) return null;
+  if (!ready || (!isAdmin && !isSuperAdmin && !isTeacher && !canModerate) || visible.length === 0) return null;
 
 
   if (collapsed) {
@@ -210,7 +232,9 @@ export function AppSidebar() {
                 ? "text-mint"
                 : g.tone === "teacher"
                   ? "text-orange-300"
-                  : "";
+                  : g.tone === "moderator"
+                    ? "text-cyan-300"
+                    : "";
           const toneIcon =
             g.tone === "super"
               ? "text-yellow-300 drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]"
@@ -218,7 +242,9 @@ export function AppSidebar() {
                 ? "text-mint drop-shadow-[0_0_4px_var(--mint)]"
                 : g.tone === "teacher"
                   ? "text-orange-300 drop-shadow-[0_0_4px_rgba(253,186,116,0.6)]"
-                  : "";
+                  : g.tone === "moderator"
+                    ? "text-cyan-300 drop-shadow-[0_0_4px_rgba(103,232,249,0.6)]"
+                    : "";
           return (
             <div key={g.label} className="mb-0.5">
               <button
@@ -243,6 +269,9 @@ export function AppSidebar() {
                 {g.tone === "teacher" && (
                   <GraduationCap className="ml-auto h-3 w-3 shrink-0 text-orange-300 opacity-90" />
                 )}
+                {g.tone === "moderator" && (
+                  <ShieldCheck className="ml-auto h-3 w-3 shrink-0 text-cyan-300 opacity-90" />
+                )}
               </button>
               {isOpen && (
                 <div>
@@ -266,7 +295,9 @@ export function AppSidebar() {
                                 ? "border-yellow-300/50 bg-yellow-300/10 text-yellow-300"
                                 : leaf.badge === "TCH"
                                   ? "border-orange-300/50 bg-orange-300/10 text-orange-300"
-                                  : "border-mint/50 bg-mint/10 text-mint"
+                                  : leaf.badge === "MOD"
+                                    ? "border-cyan-300/50 bg-cyan-300/10 text-cyan-300"
+                                    : "border-mint/50 bg-mint/10 text-mint"
                             }`}
                           >
                             {leaf.badge}
@@ -301,6 +332,11 @@ export function AppSidebar() {
               <>
                 <span className="h-1.5 w-1.5 rounded-full bg-orange-300 shadow-[0_0_5px_rgba(253,186,116,0.8)]" />
                 TEACHER
+              </>
+            ) : canModerate ? (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_5px_rgba(103,232,249,0.8)]" />
+                MODERATOR
               </>
             ) : (
               <>
