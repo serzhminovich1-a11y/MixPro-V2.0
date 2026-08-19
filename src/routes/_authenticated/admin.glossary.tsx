@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Trash2, Save, BookMarked, Image as ImageIcon, Film, Music, X, Pencil, Search, Upload } from "lucide-react";
+import { Plus, Trash2, Save, BookMarked, Image as ImageIcon, Film, Music, X, Pencil, Search, Upload, Loader2 } from "lucide-react";
 import { listGlossaryTerms, upsertGlossaryTerm, deleteGlossaryTerm, type GlossaryTerm, type TermMedia } from "@/lib/glossary.functions";
 import { RoleGate } from "@/components/role-gate";
 import { ImageEditor } from "@/components/image-editor";
@@ -287,6 +287,10 @@ function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: strin
   const [progress, setProgress] = useState(0);
   const [progressBytes, setProgressBytes] = useState({ loaded: 0, total: 0 });
   const [editing, setEditing] = useState<File | null>(null);
+  const [fetchingForEdit, setFetchingForEdit] = useState(false);
+  // Only image/gif media get a visual preview + re-crop path — video and
+  // the audio_ab pair's plain URL fields stay as-is.
+  const previewable = accept.includes("image");
 
   async function doUpload(file: File | Blob, filename: string, contentType: string) {
     const userId = session?.user.id;
@@ -328,6 +332,28 @@ function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: strin
     else doUpload(file, file.name, file.type);
   }
 
+  // Re-crop the image that's already set, instead of only ever being able
+  // to reach ImageEditor by picking a brand new file from disk — pull the
+  // current URL back down as a Blob and feed it in exactly like a fresh
+  // upload would. Re-uploads under a new name on confirm (doUpload just
+  // calls onChange with whatever URL it gets back), it doesn't try to
+  // overwrite the original object in storage.
+  async function editExisting() {
+    if (!value || fetchingForEdit) return;
+    setFetchingForEdit(true);
+    try {
+      const res = await fetch(value);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const name = value.split("/").pop()?.split("?")[0] || "image.jpg";
+      setEditing(new File([blob], name, { type: blob.type || "image/jpeg" }));
+    } catch (e: any) {
+      toast.error(`Не удалось загрузить картинку для редактирования: ${e.message ?? e}`);
+    } finally {
+      setFetchingForEdit(false);
+    }
+  }
+
   return (
     <div className="space-y-1">
       {editing && (
@@ -342,7 +368,26 @@ function FileOrUrlInput({ value, onChange, accept, placeholder }: { value: strin
           }}
         />
       )}
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded bg-black/40 px-2 py-1 text-xs font-mono" />
+      {previewable && value && (
+        <div className="group relative w-full max-w-[220px] overflow-hidden rounded-lg border border-black/50 bg-black/40">
+          <img src={value} alt="" className="aspect-video w-full object-cover" />
+          <button
+            type="button"
+            onClick={editExisting}
+            disabled={fetchingForEdit}
+            className="absolute inset-0 flex items-center justify-center gap-1.5 bg-black/70 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-100"
+          >
+            {fetchingForEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
+            {fetchingForEdit ? "Загрузка…" : "Редактировать"}
+          </button>
+        </div>
+      )}
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`w-full rounded bg-black/40 px-2 py-1 font-mono ${previewable ? "text-[10px] text-muted-foreground/70" : "text-xs"}`}
+      />
       <div className="flex items-center gap-2">
         <label className="inline-flex cursor-pointer items-center gap-1 rounded border border-mint/40 bg-mint/10 px-2 py-1 text-[10px] text-mint hover:bg-mint/20">
           <Upload className="h-3 w-3" />
