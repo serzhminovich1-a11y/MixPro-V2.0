@@ -104,11 +104,14 @@ function PublicProfilePage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-14">
       <div className="panel overflow-hidden rounded-2xl">
-        {/* Banner — a tall, dimmed hero image (Steam-style profile backdrop),
-            same treatment as the owner's own view, just read-only here. */}
-        <div className="relative h-40 w-full overflow-hidden bg-secondary sm:h-56" style={{ background: p.banner_url ? undefined : `linear-gradient(135deg, ${accent}40, transparent)` }}>
+        {/* Banner — a tall, dimmed hero image (Steam-style profile backdrop)
+            when there's an actual photo to show. Without one, a big empty
+            gradient block is just dead space, so it collapses back down to
+            a slim accent-tinted strip instead — same treatment as the
+            owner's own view, just read-only here. */}
+        <div className={`relative w-full overflow-hidden bg-secondary ${p.banner_url ? "h-40 sm:h-56" : "h-16 sm:h-20"}`} style={{ background: p.banner_url ? undefined : `linear-gradient(135deg, ${accent}33, transparent)` }}>
           <BannerImage path={p.banner_url} className="h-full w-full object-cover" style={{ filter: "brightness(0.62) saturate(1.15)" }} />
-          <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--panel) 96%)" }} />
+          {p.banner_url && <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--panel) 96%)" }} />}
         </div>
         <div className="p-6 md:p-8">
         <div className="-mt-10 flex flex-wrap items-start gap-4 sm:-mt-8">
@@ -121,21 +124,20 @@ function PublicProfilePage() {
               {p.verified && <BadgeCheck className="h-5 w-5 text-cyan" />}
             </div>
             {p.full_name && <p className="mt-0.5 truncate text-sm font-medium text-foreground/90">{p.full_name}</p>}
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1"><Zap className="h-3 w-3 text-mint" />{p.xp ?? 0} XP</span>
-              <span>·</span>
+            {/* Each stat is its own self-contained chip (not text joined by
+                "·" separators) — with flex-wrap, a standalone separator
+                span can end up orphaned alone at the end of a wrapped
+                line, which is exactly what happened here before. */}
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-1.5 py-0.5"><Zap className="h-3 w-3 text-mint" />{p.xp ?? 0} XP</span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-violet/40 bg-violet/10 py-0.5 pl-0.5 pr-2 font-semibold text-violet">
                 <span className="grid h-4 w-4 place-items-center rounded-full bg-violet/25 font-mono text-[9px]">{p.level ?? 1}</span>
                 Уровень
               </span>
               {league && (
-                <>
-                  <span>·</span>
-                  <span className="inline-flex items-center gap-1"><Trophy className="h-3 w-3" style={{ color: league.color }} />{league.name}</span>
-                </>
+                <span className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-1.5 py-0.5"><Trophy className="h-3 w-3" style={{ color: league.color }} />{league.name}</span>
               )}
-              <span>·</span>
-              <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{tenureLabel(p.created_at)}</span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-1.5 py-0.5"><Clock className="h-3 w-3" />{tenureLabel(p.created_at)}</span>
             </div>
             <div className="mt-2 flex items-center gap-3 text-xs">
               <span><span className="font-semibold text-foreground">{followerCount}</span> <span className="text-muted-foreground">подписчиков</span></span>

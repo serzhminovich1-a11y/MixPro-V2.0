@@ -496,11 +496,14 @@ function ProfilePage() {
       {/* Header card */}
       <div className="glass overflow-hidden rounded-2xl">
         {/* Banner — a tall, dimmed hero image (Steam-style profile backdrop)
-            that fades into the card's own background at the bottom, rather
-            than a thin decorative strip. */}
-        <div className="group relative h-44 w-full overflow-hidden bg-secondary sm:h-64" style={{ background: bannerSigned ? undefined : `linear-gradient(135deg, ${accent}40, transparent)` }}>
+            that fades into the card's own background at the bottom, when
+            there's actually a photo to show. Without one, that much empty
+            gradient is just dead space (this is the state every account
+            starts in), so it collapses to a slim accent-tinted strip
+            instead — same as it was before this pass. */}
+        <div className={`group relative w-full overflow-hidden bg-secondary ${bannerSigned ? "h-44 sm:h-64" : "h-20 sm:h-28"}`} style={{ background: bannerSigned ? undefined : `linear-gradient(135deg, ${accent}33, transparent)` }}>
           {bannerSigned && <img src={bannerSigned} alt="" className="h-full w-full object-cover" style={{ filter: "brightness(0.62) saturate(1.15)" }} />}
-          <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--panel) 96%)" }} />
+          {bannerSigned && <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--panel) 96%)" }} />}
           <button
             type="button"
             onClick={() => bannerInputRef.current?.click()}
