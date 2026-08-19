@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   Trophy, Gamepad2, GraduationCap, SlidersHorizontal, Pencil, Check, X,
   Shield, ShieldCheck, Crown, ImagePlus, Send, Trash2,
-  Music4, Loader2, AlertTriangle, BadgeCheck,
+  Music4, Loader2, AlertTriangle, BadgeCheck, Clock,
   Search, LayoutGrid, List as ListIcon, Plus, ChevronDown, ChevronUp,
   Play, Heart, MessageCircle, Headphones, KeyRound, Sparkles, Lock, ExternalLink,
 } from "lucide-react";
@@ -20,7 +20,8 @@ import { resolveStorageUrl } from "@/lib/storage-url";
 import { SocialLinksEditor, parseSocials } from "@/components/social-links";
 import { useSubscription } from "@/hooks/use-subscription";
 import { ROLE_RULES, EXTRA_PERMISSION_LABEL, type StaffRole } from "@/lib/role-rules";
-import { ACCENT_COLORS, DISPLAY_FONTS, accentHex, fontFamily } from "@/lib/profile-customization";
+import { ACCENT_COLORS, DISPLAY_FONTS, accentHex, fontFamily, tenureLabel } from "@/lib/profile-customization";
+import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -108,6 +109,7 @@ function ProfilePage() {
   const [presetsCount, setPresetsCount] = useState(0);
   const [roles, setRoles] = useState<string[]>([]);
   const [staffPerms, setStaffPerms] = useState<{ can_manage_courses: boolean; can_view_finances: boolean } | null>(null);
+  const [badges, setBadges] = useState<ProfileBadge[]>([]);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ username: "", full_name: "", bio: "" });
   const [saving, setSaving] = useState(false);
@@ -193,13 +195,17 @@ function ProfilePage() {
 
   useEffect(() => {
     async function load() {
-      const [p, s, lp, pr, rl, sp] = await Promise.all([
+      const [p, s, lp, pr, rl, sp, uc, ac] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
         supabase.from("game_scores").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
         supabase.from("lesson_progress").select("id", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("presets").select("id", { count: "exact", head: true }).eq("author_id", user.id),
         supabase.from("user_roles").select("role").eq("user_id", user.id),
         supabase.from("staff_permissions").select("can_manage_courses, can_view_finances").eq("user_id", user.id).maybeSingle(),
+        // Badges — same two-query + client-side join pattern used everywhere
+        // else certifications are read (see admin.index.tsx, public.functions.ts).
+        supabase.from("user_certifications").select("certification_id, awarded_at").eq("user_id", user.id),
+        supabase.from("certifications").select("id, name, color, icon"),
       ]);
       if (p.data) {
         setProfile(p.data);
@@ -214,6 +220,15 @@ function ProfilePage() {
       setPresetsCount(pr.count ?? 0);
       if (rl.data) setRoles(rl.data.map((r) => r.role as string));
       if (sp.data) setStaffPerms(sp.data);
+      const certMap = new Map((ac.data ?? []).map((c) => [c.id, c]));
+      setBadges(
+        (uc.data ?? [])
+          .map((row): ProfileBadge | null => {
+            const c = certMap.get(row.certification_id);
+            return c ? { id: c.id, name: c.name, color: c.color, icon: c.icon, awardedAt: row.awarded_at } : null;
+          })
+          .filter((b): b is ProfileBadge => !!b),
+      );
       loadWall();
     }
     load();
@@ -480,9 +495,12 @@ function ProfilePage() {
       <UploadProgressPanel uploads={uploads} />
       {/* Header card */}
       <div className="glass overflow-hidden rounded-2xl">
-        {/* Banner — the "this is my page" signal before anything else loads. */}
-        <div className="group relative h-32 w-full bg-secondary sm:h-44" style={{ background: bannerSigned ? undefined : `linear-gradient(135deg, ${accent}33, transparent)` }}>
-          {bannerSigned && <img src={bannerSigned} alt="" className="h-full w-full object-cover" />}
+        {/* Banner — a tall, dimmed hero image (Steam-style profile backdrop)
+            that fades into the card's own background at the bottom, rather
+            than a thin decorative strip. */}
+        <div className="group relative h-44 w-full overflow-hidden bg-secondary sm:h-64" style={{ background: bannerSigned ? undefined : `linear-gradient(135deg, ${accent}40, transparent)` }}>
+          {bannerSigned && <img src={bannerSigned} alt="" className="h-full w-full object-cover" style={{ filter: "brightness(0.62) saturate(1.15)" }} />}
+          <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--panel) 96%)" }} />
           <button
             type="button"
             onClick={() => bannerInputRef.current?.click()}
@@ -613,13 +631,23 @@ function ProfilePage() {
                   >
                     <span className="text-sm leading-none">{league.icon}</span> {league.name}
                   </span>
-                  <span className="rounded-md border border-violet/40 bg-violet/10 px-2 py-0.5 text-xs font-mono font-bold text-violet">LV {level}</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-violet/40 bg-violet/10 py-0.5 pl-0.5 pr-2.5 text-xs font-bold text-violet">
+                    <span className="grid h-5 w-5 place-items-center rounded-full bg-violet/25 font-mono text-[10px]">{level}</span>
+                    Уровень
+                  </span>
                   <button onClick={() => setEditing(true)} aria-label="Редактировать профиль" className="ml-auto text-muted-foreground hover:text-foreground">
                     <Pencil className="h-4 w-4" />
                   </button>
                 </div>
                 {profile?.full_name && <p className="mt-1 text-sm font-medium text-foreground/90">{profile.full_name}</p>}
-                <p className="mt-1 text-xs text-muted-foreground">{user.email}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span>{user.email}</span>
+                  {profile?.created_at && (
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> {tenureLabel(profile.created_at)}
+                    </span>
+                  )}
+                </div>
                 {profile?.bio && <p className="mt-3 whitespace-pre-wrap text-sm text-foreground/80">{profile.bio}</p>}
                 <div className="mt-3">
                   <SocialLinksEditor
@@ -647,6 +675,11 @@ function ProfilePage() {
                   </div>
                 </div>
 
+                {badges.length > 0 && (
+                  <div className="mt-5">
+                    <CertBadgeRow badges={badges} />
+                  </div>
+                )}
               </>
             )}
           </div>

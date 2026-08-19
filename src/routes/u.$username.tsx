@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { BadgeCheck, Trophy, Zap, UserPlus, UserCheck, MessageSquare, Loader2 } from "lucide-react";
+import { BadgeCheck, Trophy, Zap, UserPlus, UserCheck, MessageSquare, Loader2, Clock } from "lucide-react";
 import { getProfileByUsername } from "@/lib/public.functions";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 import { AvatarImage } from "@/components/avatar-image";
@@ -10,7 +10,8 @@ import { SocialLinksView, parseSocials } from "@/components/social-links";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { BannerImage } from "@/components/banner-image";
-import { accentHex, fontFamily } from "@/lib/profile-customization";
+import { accentHex, fontFamily, tenureLabel } from "@/lib/profile-customization";
+import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
 
 const profileQuery = (username: string) =>
   queryOptions({
@@ -98,14 +99,16 @@ function PublicProfilePage() {
 
   const accent = accentHex(p.accent_color);
   const nameFont = fontFamily(p.display_font);
+  const badges: ProfileBadge[] = (data.certs ?? []).map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon, awardedAt: c.awarded_at }));
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-14">
       <div className="panel overflow-hidden rounded-2xl">
-        {/* Banner — same personalization a visitor should actually see, not
-            just the profile owner. Read-only here, no upload control. */}
-        <div className="relative h-28 w-full bg-secondary sm:h-36" style={{ background: p.banner_url ? undefined : `linear-gradient(135deg, ${accent}33, transparent)` }}>
-          <BannerImage path={p.banner_url} className="h-full w-full object-cover" />
+        {/* Banner — a tall, dimmed hero image (Steam-style profile backdrop),
+            same treatment as the owner's own view, just read-only here. */}
+        <div className="relative h-40 w-full overflow-hidden bg-secondary sm:h-56" style={{ background: p.banner_url ? undefined : `linear-gradient(135deg, ${accent}40, transparent)` }}>
+          <BannerImage path={p.banner_url} className="h-full w-full object-cover" style={{ filter: "brightness(0.62) saturate(1.15)" }} />
+          <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--panel) 96%)" }} />
         </div>
         <div className="p-6 md:p-8">
         <div className="-mt-10 flex flex-wrap items-start gap-4 sm:-mt-8">
@@ -121,13 +124,18 @@ function PublicProfilePage() {
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1"><Zap className="h-3 w-3 text-mint" />{p.xp ?? 0} XP</span>
               <span>·</span>
-              <span>LVL {p.level ?? 1}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-violet/40 bg-violet/10 py-0.5 pl-0.5 pr-2 font-semibold text-violet">
+                <span className="grid h-4 w-4 place-items-center rounded-full bg-violet/25 font-mono text-[9px]">{p.level ?? 1}</span>
+                Уровень
+              </span>
               {league && (
                 <>
                   <span>·</span>
                   <span className="inline-flex items-center gap-1"><Trophy className="h-3 w-3" style={{ color: league.color }} />{league.name}</span>
                 </>
               )}
+              <span>·</span>
+              <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{tenureLabel(p.created_at)}</span>
             </div>
             <div className="mt-2 flex items-center gap-3 text-xs">
               <span><span className="font-semibold text-foreground">{followerCount}</span> <span className="text-muted-foreground">подписчиков</span></span>
@@ -172,6 +180,12 @@ function PublicProfilePage() {
           <div className="mt-5">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Ссылки</p>
             <SocialLinksView socials={socials} />
+          </div>
+        )}
+
+        {badges.length > 0 && (
+          <div className="mt-5">
+            <CertBadgeRow badges={badges} />
           </div>
         )}
 

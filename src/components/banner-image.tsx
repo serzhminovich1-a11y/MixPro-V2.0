@@ -11,11 +11,11 @@ function fastBannerUrl(path: string | null | undefined): string | null {
   return null;
 }
 
-type Props = { path: string | null | undefined; className?: string };
+type Props = { path: string | null | undefined; className?: string; style?: React.CSSProperties };
 
 /** Renders a profile banner image if one's set; renders nothing (parent
  * supplies the fallback gradient) otherwise. */
-export function BannerImage({ path, className }: Props) {
+export function BannerImage({ path, className, style }: Props) {
   const fast = useMemo(() => fastBannerUrl(path), [path]);
   const [resolved, setResolved] = useState<string | null>(null);
 
@@ -32,5 +32,5 @@ export function BannerImage({ path, className }: Props) {
 
   const src = fast ?? resolved;
   if (!src) return null;
-  return <img src={src} alt="" className={className} loading="lazy" />;
+  return <img src={src} alt="" className={className} style={style} loading="lazy" />;
 }

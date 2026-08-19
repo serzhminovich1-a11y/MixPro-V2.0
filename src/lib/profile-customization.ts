@@ -35,3 +35,25 @@ export function accentHex(id: string | null | undefined): string {
 export function fontFamily(id: string | null | undefined): string {
   return DISPLAY_FONTS.find((f) => f.id === id)?.family ?? DISPLAY_FONTS[0].family;
 }
+
+function pluralRu(n: number, forms: [string, string, string]): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return forms[1];
+  return forms[2];
+}
+
+/** "Стаж на проекте" — Steam-style tenure line ("N лет с нами"), derived
+ * straight from profiles.created_at rather than a new column. */
+export function tenureLabel(createdAt: string): string {
+  const start = new Date(createdAt);
+  const now = new Date();
+  let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+  if (now.getDate() < start.getDate()) months -= 1;
+  months = Math.max(0, months);
+  const years = Math.floor(months / 12);
+  if (years >= 1) return `${years} ${pluralRu(years, ["год", "года", "лет"])} с нами`;
+  if (months >= 1) return `${months} ${pluralRu(months, ["месяц", "месяца", "месяцев"])} с нами`;
+  return "Новичок на проекте";
+}

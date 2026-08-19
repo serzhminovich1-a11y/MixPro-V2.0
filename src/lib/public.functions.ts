@@ -35,14 +35,28 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
       .select("id, username, avatar_url, banner_url, accent_color, display_font, xp, level, verified, created_at, bio, full_name, socials")
       .ilike("username", input.username)
       .maybeSingle();
-    if (error) return { profile: null, error: error.message, followerCount: 0, followingCount: 0 };
-    if (!data) return { profile: null, error: null, followerCount: 0, followingCount: 0 };
-    const [followers, following] = await Promise.all([
+    if (error) return { profile: null, error: error.message, followerCount: 0, followingCount: 0, certs: [] as Cert[] };
+    if (!data) return { profile: null, error: null, followerCount: 0, followingCount: 0, certs: [] as Cert[] };
+    const [followers, following, userCertsRes, allCertsRes] = await Promise.all([
       s.from("user_follows").select("follower_id", { count: "exact", head: true }).eq("followed_id", data.id),
       s.from("user_follows").select("followed_id", { count: "exact", head: true }).eq("follower_id", data.id),
+      // Badges — earned certifications. Both tables are publicly readable
+      // by RLS (same as everywhere else this is fetched), so this works
+      // for any visitor, not just the profile owner.
+      s.from("user_certifications").select("certification_id, awarded_at").eq("user_id", data.id),
+      s.from("certifications").select("id, slug, name, color, icon"),
     ]);
-    return { profile: data, error: null, followerCount: followers.count ?? 0, followingCount: following.count ?? 0 };
+    const certMap = new Map((allCertsRes.data ?? []).map((c) => [c.id, c]));
+    const certs = (userCertsRes.data ?? [])
+      .map((uc) => {
+        const c = certMap.get(uc.certification_id);
+        return c ? { ...c, awarded_at: uc.awarded_at } : null;
+      })
+      .filter((c): c is NonNullable<typeof c> => !!c);
+    return { profile: data, error: null, followerCount: followers.count ?? 0, followingCount: following.count ?? 0, certs };
   });
+
+type Cert = { id: string; slug: string; name: string; color: string; icon: string | null; awarded_at?: string };
 
 export const searchUsernames = createServerFn({ method: "GET" })
   .validator((input: { q: string }) => input)
