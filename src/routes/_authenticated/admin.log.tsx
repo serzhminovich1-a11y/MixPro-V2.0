@@ -31,6 +31,7 @@ const ACTION_LABEL: Record<string, string> = {
   subscription_set: "Установил подписку",
   subscription_extend: "Продлил подписку",
   self_boost: "Self-boost",
+  staff_permission_set: "Изменил доп. права команды",
 };
 
 type Row = {

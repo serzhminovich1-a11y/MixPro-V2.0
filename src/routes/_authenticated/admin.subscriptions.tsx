@@ -9,7 +9,7 @@ import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 export const Route = createFileRoute("/_authenticated/admin/subscriptions")({
   head: () => ({ meta: [{ title: "Подписки и выручка — MixPro" }, { name: "robots", content: "noindex" }] }),
   component: () => (
-    <RoleGate role="super_admin">
+    <RoleGate role="finance">
       <AdminSubscriptionsPage />
     </RoleGate>
   ),
@@ -146,7 +146,7 @@ function AdminSubscriptionsPage() {
         <div>
           <h1 className="text-2xl font-bold">Подписки и выручка</h1>
           <p className="text-xs text-muted-foreground">
-            Только для супер-админа. Оплаты пока нет — тарифы выдаются вручную, суммы ниже посчитаны из цен PRO {rub(1000)}/мес и Lifetime {rub(14990)} разово.
+            Супер-админ и те, кому отдельно выдан доступ к финансам. Оплаты пока нет — тарифы выдаются вручную, суммы ниже посчитаны из цен PRO {rub(1000)}/мес и Lifetime {rub(14990)} разово.
           </p>
         </div>
       </div>

@@ -18,6 +18,7 @@ import { uploadWithProgress, removeStorageObjects, formatBytes } from "@/lib/upl
 import { resolveStorageUrl } from "@/lib/storage-url";
 import { SocialLinksEditor, parseSocials } from "@/components/social-links";
 import { useSubscription } from "@/hooks/use-subscription";
+import { ROLE_RULES, EXTRA_PERMISSION_LABEL, type StaffRole } from "@/lib/role-rules";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -33,6 +34,7 @@ const ROLE_META: Record<string, { label: string; icon: typeof Shield; className:
   super_admin: { label: "Супер-админ", icon: Crown, className: "text-yellow-400 border-yellow-400/40 bg-yellow-400/10" },
   admin: { label: "Админ", icon: ShieldCheck, className: "text-mint border-mint/40 bg-mint/10" },
   moderator: { label: "Модератор", icon: Shield, className: "text-cyan-400 border-cyan-400/40 bg-cyan-400/10" },
+  teacher: { label: "Преподаватель", icon: GraduationCap, className: "text-orange-300 border-orange-300/40 bg-orange-300/10" },
 };
 
 const TIER_META: Record<string, { label: string; icon: typeof Sparkles; className: string }> = {
@@ -100,6 +102,7 @@ function ProfilePage() {
   const [lessonsDone, setLessonsDone] = useState(0);
   const [presetsCount, setPresetsCount] = useState(0);
   const [roles, setRoles] = useState<string[]>([]);
+  const [staffPerms, setStaffPerms] = useState<{ can_manage_courses: boolean; can_view_finances: boolean } | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ username: "", full_name: "", bio: "" });
   const [saving, setSaving] = useState(false);
@@ -184,12 +187,13 @@ function ProfilePage() {
 
   useEffect(() => {
     async function load() {
-      const [p, s, lp, pr, rl] = await Promise.all([
+      const [p, s, lp, pr, rl, sp] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
         supabase.from("game_scores").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
         supabase.from("lesson_progress").select("id", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("presets").select("id", { count: "exact", head: true }).eq("author_id", user.id),
         supabase.from("user_roles").select("role").eq("user_id", user.id),
+        supabase.from("staff_permissions").select("can_manage_courses, can_view_finances").eq("user_id", user.id).maybeSingle(),
       ]);
       if (p.data) {
         setProfile(p.data);
@@ -201,6 +205,7 @@ function ProfilePage() {
       setLessonsDone(lp.count ?? 0);
       setPresetsCount(pr.count ?? 0);
       if (rl.data) setRoles(rl.data.map((r) => r.role as string));
+      if (sp.data) setStaffPerms(sp.data);
       loadWall();
     }
     load();
@@ -408,8 +413,12 @@ function ProfilePage() {
   const leagueProgress = progressInLeague(xp);
   const topRole = roles.includes("super_admin") ? "super_admin"
     : roles.includes("admin") ? "admin"
-    : roles.includes("moderator") ? "moderator" : null;
+    : roles.includes("moderator") ? "moderator"
+    : roles.includes("teacher") ? "teacher" : null;
   const roleMeta = topRole ? ROLE_META[topRole] : null;
+  // Every role the person actually holds, in the same fixed order as the
+  // team page — a person can hold more than one (e.g. moderator + teacher).
+  const staffRoles = (["super_admin", "admin", "moderator", "teacher"] as const).filter((r) => roles.includes(r));
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
@@ -591,6 +600,65 @@ function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Rules — only for staff (admin/moderator/teacher/super-admin) */}
+      {staffRoles.length > 0 && (
+        <div className="glass mt-4 rounded-2xl p-5 md:p-6">
+          <div className="flex items-center gap-2">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-mint/10 text-mint">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Правила и права</h2>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {staffRoles.length > 1 ? "Твои роли на проекте и что именно тебе доступно." : "Твоя роль на проекте и что именно тебе доступно."}
+          </p>
+          <div className="mt-4 space-y-4">
+            {staffRoles.map((r: StaffRole) => {
+              const meta = ROLE_META[r];
+              const rules = ROLE_RULES[r];
+              return (
+                <div key={r} className="border-t border-border/60 pt-4 first:border-t-0 first:pt-0">
+                  <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-bold ${meta.className}`}>
+                    <meta.icon className="h-3.5 w-3.5" /> {meta.label}
+                  </span>
+                  <ul className="mt-2.5 space-y-1 text-sm text-mint/90">
+                    {rules.can.map((line) => (
+                      <li key={line} className="flex items-start gap-2">
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {line}
+                      </li>
+                    ))}
+                  </ul>
+                  <ul className="mt-1.5 space-y-1 text-sm text-muted-foreground">
+                    {rules.cannot.map((line) => (
+                      <li key={line} className="flex items-start gap-2">
+                        <X className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {line}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+            {(staffPerms?.can_manage_courses || staffPerms?.can_view_finances) && (
+              <div className="border-t border-border/60 pt-4">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-300">Доп. права от супер-админа</span>
+                <ul className="mt-2 space-y-1 text-sm text-mint/90">
+                  {staffPerms?.can_manage_courses && (
+                    <li className="flex items-start gap-2">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {EXTRA_PERMISSION_LABEL.canManageCourses}
+                    </li>
+                  )}
+                  {staffPerms?.can_view_finances && (
+                    <li className="flex items-start gap-2">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {EXTRA_PERMISSION_LABEL.canViewFinances}
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Password */}
       <div className="glass mt-4 rounded-2xl p-5">

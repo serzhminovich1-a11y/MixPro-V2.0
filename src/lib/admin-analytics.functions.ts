@@ -20,18 +20,24 @@ function isActive(tier: string | null, until: string | null): boolean {
   return !!until && new Date(until).getTime() > Date.now();
 }
 
-/** Subscription analytics for the super-admin dashboard: tier breakdown,
+/** Subscription analytics for the finance dashboard: tier breakdown,
  * estimated revenue (see TIER_PRICE_RUB — no payment processor yet, this
  * is priced-out from current tiers, not real transactions), a weekly
  * growth series sourced from admin_action_log, and who's expiring soon.
- * Super-admin only — this is financial data, one rank tighter than the
- * regular admin panel. */
+ * Super-admin by default, plus anyone a super-admin has separately granted
+ * the can_view_finances staff flag (see staff_permissions / RoleGate's
+ * "finance" variant) — the underlying admin_action_log read also needs the
+ * matching can_view_finances() RLS policy or the growth chart silently
+ * comes back empty for a flag-only grantee. */
 export const getSubscriptionAnalytics = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: myRoles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
+    const [{ data: myRoles }, { data: perms }] = await Promise.all([
+      context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
+      context.supabase.from("staff_permissions").select("can_view_finances").eq("user_id", context.userId).maybeSingle(),
+    ]);
     const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, RANKS[r.role] ?? 0), 0);
-    if (myRank < 3) throw new Error("Только для супер-админа");
+    if (myRank < 3 && !perms?.can_view_finances) throw new Error("Только для супер-админа или тех, кому выдан доступ к финансам");
 
     const { data: profilesData, error: pErr } = await context.supabase
       .from("profiles")

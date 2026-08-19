@@ -6,11 +6,16 @@ import type { Json } from "@/integrations/supabase/types";
 const RANKS: Record<string, number> = { super_admin: 3, admin: 2, moderator: 1, user: 0 };
 
 /** Fire-and-forget audit trail entry. Never blocks or fails the caller — a
- * logging hiccup shouldn't stop an admin action that already succeeded. */
-async function logAction(actorId: string, action: string, targetId: string | null, meta: Record<string, unknown> = {}) {
+ * logging hiccup shouldn't stop an admin action that already succeeded.
+ * Goes through log_admin_action (SECURITY DEFINER) rather than a direct
+ * insert — admin_action_log deliberately has no authenticated INSERT
+ * grant, so a plain client can't forge audit entries; the RPC only ever
+ * inserts with actor_id = auth.uid() from the caller's own JWT. Needs the
+ * caller's authenticated client (not service-role) for auth.uid() to
+ * resolve inside the function at all. */
+async function logAction(supabase: any, actorId: string, action: string, targetId: string | null, meta: Record<string, unknown> = {}) {
   try {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("admin_action_log").insert({ actor_id: actorId, action, target_id: targetId, meta: meta as Json });
+    await supabase.rpc("log_admin_action", { _actor: actorId, _action: action, _target: targetId, _meta: meta as Json });
   } catch {
     /* audit log is best-effort */
   }
@@ -25,26 +30,35 @@ export const claimSuperAdmin = createServerFn({ method: "POST" })
     // in the migrations for why this used to be a two-call race.
     const { error } = await context.supabase.rpc("claim_super_admin", { _actor: context.userId });
     if (error) throw new Error(error.message);
-    await logAction(context.userId, "claim_super_admin", null);
+    await logAction(context.supabase, context.userId, "claim_super_admin", null);
     return { ok: true };
   });
 
-/** Get current caller admin context (max role + super flag). */
+/** Get current caller admin context (max role + super flag + any extra
+ * staff_permissions flags granted on top of their role). */
 export const getMyAdminContext = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: roles } = await context.supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId);
+    const [{ data: roles }, { data: perms }] = await Promise.all([
+      context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
+      context.supabase.from("staff_permissions").select("can_manage_courses, can_view_finances").eq("user_id", context.userId).maybeSingle(),
+    ]);
     const list = (roles ?? []).map((r) => r.role as string);
     const rank = list.reduce((m, r) => Math.max(m, RANKS[r] ?? 0), 0);
+    const isSuperAdmin = list.includes("super_admin");
     return {
       userId: context.userId,
       roles: list,
-      isSuperAdmin: list.includes("super_admin"),
+      isSuperAdmin,
       isAdmin: rank >= 2,
       canModerate: rank >= 1,
+      isTeacher: list.includes("teacher"),
+      // Page-access flag ("can I open the course editor at all") — broader
+      // than the actual write-scope. A plain teacher gets in here to work
+      // on their OWN courses/lessons; course-editor.functions.ts is what
+      // narrows a teacher-without-the-extra-flag down to created_by=self.
+      canManageCourses: rank >= 1 || list.includes("teacher") || !!perms?.can_manage_courses,
+      canViewFinances: isSuperAdmin || !!perms?.can_view_finances,
     };
   });
 
@@ -123,13 +137,14 @@ export const listCertifications = createServerFn({ method: "GET" })
     return { certifications: data ?? [] };
   });
 
-/** Grant a role (admin/moderator). Ranked hierarchy enforced. */
+/** Grant a role (admin/moderator/teacher). Ranked hierarchy enforced —
+ * see roles_insert_hierarchical/roles_delete_hierarchical RLS. */
 export const setRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { targetId: string; role: "admin" | "moderator" | "user" | "super_admin"; grant: boolean }) =>
+  .validator((input: { targetId: string; role: "admin" | "moderator" | "teacher" | "user" | "super_admin"; grant: boolean }) =>
     z.object({
       targetId: z.string().uuid(),
-      role: z.enum(["admin", "moderator", "user", "super_admin"]),
+      role: z.enum(["admin", "moderator", "teacher", "user", "super_admin"]),
       grant: z.boolean(),
     }).parse(input),
   )
@@ -148,7 +163,7 @@ export const setRole = createServerFn({ method: "POST" })
         .eq("role", data.role);
       if (error) throw new Error(error.message);
     }
-    await logAction(context.userId, data.grant ? "role_grant" : "role_revoke", data.targetId, { role: data.role });
+    await logAction(context.supabase, context.userId, data.grant ? "role_grant" : "role_revoke", data.targetId, { role: data.role });
     return { ok: true };
   });
 
@@ -164,7 +179,7 @@ export const adjustXp = createServerFn({ method: "POST" })
       _delta: data.delta,
     });
     if (error) throw new Error(error.message);
-    await logAction(context.userId, "xp_adjust", data.targetId, { delta: data.delta });
+    await logAction(context.supabase, context.userId, "xp_adjust", data.targetId, { delta: data.delta });
     return { ok: true };
   });
 
@@ -187,7 +202,7 @@ export const banUser = createServerFn({ method: "POST" })
       ...(expires ? { expires_at: expires } : {}),
     });
     if (error) throw new Error(error.message);
-    await logAction(context.userId, "ban", data.targetId, { reason: data.reason, days: data.days ?? null });
+    await logAction(context.supabase, context.userId, "ban", data.targetId, { reason: data.reason, days: data.days ?? null });
     return { ok: true };
   });
 
@@ -197,7 +212,7 @@ export const unbanUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("user_bans").delete().eq("user_id", data.targetId);
     if (error) throw new Error(error.message);
-    await logAction(context.userId, "unban", data.targetId);
+    await logAction(context.supabase, context.userId, "unban", data.targetId);
     return { ok: true };
   });
 
@@ -226,7 +241,7 @@ export const awardCert = createServerFn({ method: "POST" })
         .eq("certification_id", data.certificationId);
       if (error) throw new Error(error.message);
     }
-    await logAction(context.userId, data.grant ? "cert_grant" : "cert_revoke", data.targetId, { certificationId: data.certificationId });
+    await logAction(context.supabase, context.userId, data.grant ? "cert_grant" : "cert_revoke", data.targetId, { certificationId: data.certificationId });
     return { ok: true };
   });
 
@@ -248,7 +263,7 @@ export const setSubscription = createServerFn({ method: "POST" })
       _until: data.until as unknown as string,
     });
     if (error) throw new Error(error.message);
-    await logAction(context.userId, "subscription_set", data.targetId, { tier: data.tier, until: data.until });
+    await logAction(context.supabase, context.userId, "subscription_set", data.targetId, { tier: data.tier, until: data.until });
     return { ok: true };
   });
 
@@ -270,7 +285,7 @@ export const extendSubscription = createServerFn({ method: "POST" })
       _tier: data.tier ?? "pro",
     });
     if (error) throw new Error(error.message);
-    await logAction(context.userId, "subscription_extend", data.targetId, { days: data.days, tier: data.tier ?? "pro" });
+    await logAction(context.supabase, context.userId, "subscription_extend", data.targetId, { days: data.days, tier: data.tier ?? "pro" });
     return { ok: true, until: newUntil as string };
   });
 
@@ -287,7 +302,7 @@ export const setVerified = createServerFn({ method: "POST" })
       _verified: data.verified,
     });
     if (error) throw new Error(error.message);
-    await logAction(context.userId, data.verified ? "verify" : "unverify", data.targetId);
+    await logAction(context.supabase, context.userId, data.verified ? "verify" : "unverify", data.targetId);
     return { ok: true };
   });
 
@@ -309,7 +324,7 @@ export const selfBoost = createServerFn({ method: "POST" })
       _level: data.level,
     });
     if (error) throw new Error(error.message);
-    await logAction(context.userId, "self_boost", context.userId, data as Record<string, unknown>);
+    await logAction(context.supabase, context.userId, "self_boost", context.userId, data as Record<string, unknown>);
     return { ok: true };
   });
 
@@ -399,4 +414,81 @@ export const listAdminActions = createServerFn({ method: "POST" })
         target_username: r.target_id ? map.get(r.target_id) ?? null : null,
       })),
     };
+  });
+
+/** Roster of everyone with a staff role (teacher/moderator/admin/
+ * super_admin) or an extra staff_permissions grant, for the "Команда"
+ * page. Moderator+ can view (matches everywhere else that shows the team
+ * makeup); only super_admin can actually change anything from there. */
+export const getStaffRoster = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: myRoles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
+    const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, RANKS[r.role] ?? 0), 0);
+    if (myRank < 1) throw new Error("Недостаточно прав");
+
+    const [{ data: roles }, { data: perms }] = await Promise.all([
+      context.supabase.from("user_roles").select("user_id, role"),
+      context.supabase.from("staff_permissions").select("*"),
+    ]);
+    const staffIds = [...new Set([
+      ...(roles ?? []).filter((r) => r.role !== "user").map((r) => r.user_id),
+      ...(perms ?? []).map((p) => p.user_id),
+    ])];
+    if (staffIds.length === 0) return { staff: [] };
+
+    const { data: profiles } = await context.supabase
+      .from("profiles")
+      .select("id, username, avatar_url, verified, created_at")
+      .in("id", staffIds);
+
+    const rolesByUser = new Map<string, string[]>();
+    for (const r of roles ?? []) {
+      if (r.role === "user") continue;
+      const arr = rolesByUser.get(r.user_id) ?? [];
+      arr.push(r.role);
+      rolesByUser.set(r.user_id, arr);
+    }
+    const permsByUser = new Map((perms ?? []).map((p) => [p.user_id, p]));
+
+    const staff = (profiles ?? []).map((p) => ({
+      ...p,
+      roles: rolesByUser.get(p.id) ?? [],
+      canManageCourses: !!permsByUser.get(p.id)?.can_manage_courses,
+      canViewFinances: !!permsByUser.get(p.id)?.can_view_finances,
+    }));
+    return { staff };
+  });
+
+/** Toggle one staff_permissions flag for a target user. Super-admin only —
+ * RLS enforces this too (staff_perms_update_super/staff_perms_write_super),
+ * this is just a friendlier error + audit-log entry on top. */
+export const setStaffPermission = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { targetId: string; permission: "can_manage_courses" | "can_view_finances"; value: boolean }) =>
+    z.object({
+      targetId: z.string().uuid(),
+      permission: z.enum(["can_manage_courses", "can_view_finances"]),
+      value: z.boolean(),
+    }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: myRoles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
+    const isSuperAdmin = (myRoles ?? []).some((r) => r.role === "super_admin");
+    if (!isSuperAdmin) throw new Error("Только для супер-админа");
+
+    const row: {
+      user_id: string;
+      can_manage_courses?: boolean;
+      can_view_finances?: boolean;
+      updated_by: string;
+      updated_at: string;
+    } = { user_id: data.targetId, updated_by: context.userId, updated_at: new Date().toISOString() };
+    row[data.permission] = data.value;
+    const { error } = await context.supabase
+      .from("staff_permissions")
+      .upsert(row, { onConflict: "user_id" });
+    if (error) throw new Error(error.message);
+    await logAction(context.supabase, context.userId, "staff_permission_set", data.targetId, { permission: data.permission, value: data.value });
+    return { ok: true };
   });

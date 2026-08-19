@@ -60,12 +60,13 @@ function fmtDate(iso: string | null) {
 }
 
 const ROLE_LABEL: Record<string, string> = {
-  super_admin: "Супер-админ", admin: "Админ", moderator: "Модератор", user: "Юзер",
+  super_admin: "Супер-админ", admin: "Админ", moderator: "Модератор", teacher: "Преподаватель", user: "Юзер",
 };
 const ROLE_COLORS: Record<string, string> = {
   super_admin: "bg-pink-500/20 text-pink-300 border-pink-500/40",
   admin: "bg-violet/20 text-violet border-violet/40",
   moderator: "bg-cyan/20 text-cyan border-cyan/40",
+  teacher: "bg-orange-500/20 text-orange-300 border-orange-500/40",
   user: "bg-secondary text-muted-foreground border-black/60",
 };
 
@@ -426,9 +427,9 @@ function AdminPage() {
                       <section>
                         <h4 className="label-mono">Роли</h4>
                         <div className="mt-2 flex flex-wrap gap-1.5">
-                          {(["moderator", "admin", "super_admin"] as const).map((r) => {
+                          {(["teacher", "moderator", "admin", "super_admin"] as const).map((r) => {
                             const has = u.roles.includes(r);
-                            const rankNeeded = { moderator: 2, admin: 3, super_admin: 4 }[r];
+                            const rankNeeded = { teacher: 1, moderator: 2, admin: 3, super_admin: 4 }[r];
                             const canGrant = myRank >= rankNeeded;
                             return (
                               <button

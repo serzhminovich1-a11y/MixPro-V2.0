@@ -9,6 +9,9 @@ export type AdminCtx = {
   isSuperAdmin: boolean;
   isAdmin: boolean;
   canModerate: boolean;
+  isTeacher: boolean;
+  canManageCourses: boolean;
+  canViewFinances: boolean;
 };
 
 /** Fetches the current user's admin context once per session. */
@@ -47,5 +50,8 @@ export function useAdmin() {
     isAdmin: !!ctx?.isAdmin,
     isSuperAdmin: !!ctx?.isSuperAdmin,
     canModerate: !!ctx?.canModerate,
+    isTeacher: !!ctx?.isTeacher,
+    canManageCourses: !!ctx?.canManageCourses,
+    canViewFinances: !!ctx?.canViewFinances,
   };
 }

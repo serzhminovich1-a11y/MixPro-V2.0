@@ -25,6 +25,7 @@ import {
   Bell,
   Crown,
   CreditCard,
+  UserCog,
 } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 
@@ -35,7 +36,8 @@ type Group = {
   items: Leaf[];
   adminOnly?: boolean;
   superOnly?: boolean;
-  tone?: "admin" | "super";
+  teacherOnly?: boolean;
+  tone?: "admin" | "super" | "teacher";
 };
 
 const groups: Group[] = [
@@ -47,6 +49,7 @@ const groups: Group[] = [
     items: [
       { label: "Дашборд", to: "/admin/dashboard", icon: Gauge, badge: "ADM" },
       { label: "Пользователи", to: "/admin", icon: Users, badge: "ADM" },
+      { label: "Команда", to: "/admin/team", icon: UserCog, badge: "ADM" },
       { label: "Журнал действий", to: "/admin/log", icon: ScrollText, badge: "ADM" },
       { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "ADM" },
       { label: "Глоссарий", to: "/admin/glossary", icon: Library, badge: "ADM" },
@@ -65,6 +68,17 @@ const groups: Group[] = [
       { label: "Подписки", to: "/admin", hash: "subs", icon: Crown, badge: "SU" },
       { label: "Выручка и аналитика", to: "/admin/subscriptions", icon: CreditCard, badge: "SU" },
     ],
+  },
+  {
+    // Plain teachers (rank 0, no admin/moderator rank) get no other group —
+    // this is their only way into the course editor. Scoped server-side
+    // (course-editor.functions.ts) to their own created_by rows unless a
+    // super-admin also grants the can_manage_courses staff flag.
+    label: "Teacher · Studio",
+    icon: Folder,
+    teacherOnly: true,
+    tone: "teacher",
+    items: [{ label: "Мои курсы", to: "/admin/courses", icon: BookOpen, badge: "TCH" }],
   },
 ];
 
@@ -115,7 +129,7 @@ function writeGroupState(value: Record<string, boolean>) {
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { isAdmin, isSuperAdmin, ready } = useAdmin();
+  const { isAdmin, isSuperAdmin, isTeacher, ready } = useAdmin();
   const [collapsed, setCollapsed] = useState<boolean>(() => readCollapsed());
   const [open, setOpen] = useState<Record<string, boolean>>(() => readGroupState());
 
@@ -145,11 +159,14 @@ export function AppSidebar() {
   const visible = groups.filter((g) => {
     if (g.superOnly) return ready && isSuperAdmin;
     if (g.adminOnly) return ready && isAdmin;
+    // Once someone is admin+, the plain teacher shortcut group is redundant
+    // — "Курсы · редактор" is already in Admin · Studio for them.
+    if (g.teacherOnly) return ready && isTeacher && !isAdmin;
     return true;
   });
 
-  // Sidebar is an admin-only control surface. Hide for everyone else.
-  if (!ready || (!isAdmin && !isSuperAdmin) || visible.length === 0) return null;
+  // Sidebar is a staff-only control surface. Hide for everyone else.
+  if (!ready || (!isAdmin && !isSuperAdmin && !isTeacher) || visible.length === 0) return null;
 
 
   if (collapsed) {
@@ -191,13 +208,17 @@ export function AppSidebar() {
               ? "text-yellow-300"
               : g.tone === "admin"
                 ? "text-mint"
-                : "";
+                : g.tone === "teacher"
+                  ? "text-orange-300"
+                  : "";
           const toneIcon =
             g.tone === "super"
               ? "text-yellow-300 drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]"
               : g.tone === "admin"
                 ? "text-mint drop-shadow-[0_0_4px_var(--mint)]"
-                : "";
+                : g.tone === "teacher"
+                  ? "text-orange-300 drop-shadow-[0_0_4px_rgba(253,186,116,0.6)]"
+                  : "";
           return (
             <div key={g.label} className="mb-0.5">
               <button
@@ -218,6 +239,9 @@ export function AppSidebar() {
                 )}
                 {g.tone === "admin" && (
                   <Shield className="ml-auto h-3 w-3 shrink-0 text-mint opacity-90" />
+                )}
+                {g.tone === "teacher" && (
+                  <GraduationCap className="ml-auto h-3 w-3 shrink-0 text-orange-300 opacity-90" />
                 )}
               </button>
               {isOpen && (
@@ -240,7 +264,9 @@ export function AppSidebar() {
                             className={`ml-auto rounded-sm border px-1 py-[1px] font-mono text-[8px] tracking-wider ${
                               leaf.badge === "SU"
                                 ? "border-yellow-300/50 bg-yellow-300/10 text-yellow-300"
-                                : "border-mint/50 bg-mint/10 text-mint"
+                                : leaf.badge === "TCH"
+                                  ? "border-orange-300/50 bg-orange-300/10 text-orange-300"
+                                  : "border-mint/50 bg-mint/10 text-mint"
                             }`}
                           >
                             {leaf.badge}
@@ -270,6 +296,11 @@ export function AppSidebar() {
               <>
                 <span className="h-1.5 w-1.5 rounded-full bg-mint shadow-[0_0_5px_var(--mint)]" />
                 ADMIN
+              </>
+            ) : isTeacher ? (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-orange-300 shadow-[0_0_5px_rgba(253,186,116,0.8)]" />
+                TEACHER
               </>
             ) : (
               <>

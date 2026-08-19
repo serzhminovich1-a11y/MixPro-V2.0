@@ -78,7 +78,7 @@ export const Route = createFileRoute("/_authenticated/admin/courses")({
     ...(typeof s.module === "string" ? { module: s.module } : {}),
   }),
   component: () => (
-    <RoleGate role="admin">
+    <RoleGate role="course-editor">
       <CourseEditorPage />
     </RoleGate>
   ),

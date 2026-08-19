@@ -2,28 +2,49 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-async function assertModerator(supabase: any, userId: string) {
-  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  const roles = (data ?? []).map((r: any) => r.role as string);
-  const ranks: Record<string, number> = { super_admin: 3, admin: 2, moderator: 1, user: 0 };
-  const rank = roles.reduce((m: number, r: string) => Math.max(m, ranks[r] ?? 0), 0);
-  if (rank < 1) throw new Error("Только для модераторов и админов");
-  return rank;
+const RANKS: Record<string, number> = { super_admin: 3, admin: 2, moderator: 1, user: 0 };
+
+type CourseAccess = { rank: number; isTeacher: boolean; canManageAll: boolean };
+
+/** Who's allowed to touch course content, and how wide their reach is.
+ * Moderator+ (rank >= 1) already manage every course — untouched from
+ * before. A plain "teacher" role only manages rows they created
+ * themselves (created_by = them), UNLESS a super-admin also granted them
+ * the can_manage_courses staff_permissions flag, in which case they act
+ * like a moderator for course content specifically. Mirrors the RLS in
+ * 20260819120000 exactly, so a caller who fails this check would also be
+ * rejected by the database — this just gives a clearer error message
+ * instead of a confusing "0 rows updated". */
+async function getCourseAccess(supabase: any, userId: string): Promise<CourseAccess> {
+  const [{ data: roleRows }, { data: perms }] = await Promise.all([
+    supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase.from("staff_permissions").select("can_manage_courses").eq("user_id", userId).maybeSingle(),
+  ]);
+  const roles = (roleRows ?? []).map((r: any) => r.role as string);
+  const rank = roles.reduce((m: number, r: string) => Math.max(m, RANKS[r] ?? 0), 0);
+  const isTeacher = roles.includes("teacher");
+  const canManageAll = rank >= 1 || !!perms?.can_manage_courses;
+  if (rank < 1 && !isTeacher) throw new Error("Только для модераторов, админов и преподавателей");
+  return { rank, isTeacher, canManageAll };
 }
 
-/** Full admin course tree with drafts. */
+/** Admin course tree with drafts. Teachers without the course-wide flag
+ * only see modules/lessons they created. */
 export const listCourseTree = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertModerator(context.supabase, context.userId);
-    const [mods, lessons] = await Promise.all([
-      context.supabase.from("course_modules").select("*").order("order_index"),
-      context.supabase
-        .from("lessons")
-        .select("id, slug, title, category, difficulty, duration_min, module_id, order_index, xp_reward, is_published, updated_at, cover_url")
-        .order("order_index"),
-    ]);
-    return { modules: mods.data ?? [], lessons: lessons.data ?? [] };
+    const access = await getCourseAccess(context.supabase, context.userId);
+    let modQuery = context.supabase.from("course_modules").select("*").order("order_index");
+    let lessonQuery = context.supabase
+      .from("lessons")
+      .select("id, slug, title, category, difficulty, duration_min, module_id, order_index, xp_reward, is_published, updated_at, cover_url, created_by")
+      .order("order_index");
+    if (!access.canManageAll) {
+      modQuery = modQuery.eq("created_by", context.userId);
+      lessonQuery = lessonQuery.eq("created_by", context.userId);
+    }
+    const [mods, lessons] = await Promise.all([modQuery, lessonQuery]);
+    return { modules: mods.data ?? [], lessons: lessons.data ?? [], scopedToOwn: !access.canManageAll };
   });
 
 /** Load a full lesson (including content_blocks) for editing. */
@@ -31,9 +52,12 @@ export const getLessonAdmin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { id: string }) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
-    await assertModerator(context.supabase, context.userId);
+    const access = await getCourseAccess(context.supabase, context.userId);
     const { data: lesson, error } = await context.supabase.from("lessons").select("*").eq("id", data.id).maybeSingle();
     if (error) throw new Error(error.message);
+    if (lesson && !access.canManageAll && lesson.created_by !== context.userId) {
+      throw new Error("Можно редактировать только свои уроки");
+    }
     return { lesson };
   });
 
@@ -56,12 +80,19 @@ export const upsertModule = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: z.infer<typeof ModuleInput>) => ModuleInput.parse(input))
   .handler(async ({ data, context }) => {
-    await assertModerator(context.supabase, context.userId);
-    const payload = { ...data };
+    const access = await getCourseAccess(context.supabase, context.userId);
+    const payload: any = { ...data };
+    if (!data.id) {
+      payload.created_by = context.userId;
+    } else if (!access.canManageAll) {
+      const { data: existing } = await context.supabase.from("course_modules").select("created_by").eq("id", data.id).maybeSingle();
+      if (!existing || existing.created_by !== context.userId) throw new Error("Можно редактировать только свои модули");
+    }
     const { data: out, error } = data.id
       ? await context.supabase.from("course_modules").update(payload).eq("id", data.id).select().maybeSingle()
       : await context.supabase.from("course_modules").insert(payload).select().maybeSingle();
     if (error) throw new Error(error.message);
+    if (!out) throw new Error("Не удалось сохранить — нет доступа к этой записи");
     return { module: out };
   });
 
@@ -69,7 +100,11 @@ export const deleteModule = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { id: string }) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
-    await assertModerator(context.supabase, context.userId);
+    const access = await getCourseAccess(context.supabase, context.userId);
+    if (!access.canManageAll) {
+      const { data: existing } = await context.supabase.from("course_modules").select("created_by").eq("id", data.id).maybeSingle();
+      if (!existing || existing.created_by !== context.userId) throw new Error("Можно удалять только свои модули");
+    }
     // Unlink lessons instead of cascading
     await context.supabase.from("lessons").update({ module_id: null }).eq("module_id", data.id);
     const { error } = await context.supabase.from("course_modules").delete().eq("id", data.id);
@@ -100,12 +135,19 @@ export const upsertLesson = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: z.infer<typeof LessonInput>) => LessonInput.parse(input))
   .handler(async ({ data, context }) => {
-    await assertModerator(context.supabase, context.userId);
+    const access = await getCourseAccess(context.supabase, context.userId);
     const payload: any = { ...data };
+    if (!data.id) {
+      payload.created_by = context.userId;
+    } else if (!access.canManageAll) {
+      const { data: existing } = await context.supabase.from("lessons").select("created_by").eq("id", data.id).maybeSingle();
+      if (!existing || existing.created_by !== context.userId) throw new Error("Можно редактировать только свои уроки");
+    }
     const { data: out, error } = data.id
       ? await context.supabase.from("lessons").update(payload).eq("id", data.id).select().maybeSingle()
       : await context.supabase.from("lessons").insert(payload).select().maybeSingle();
     if (error) throw new Error(error.message);
+    if (!out) throw new Error("Не удалось сохранить — нет доступа к этой записи");
     return { lesson: out };
   });
 
@@ -113,7 +155,11 @@ export const deleteLesson = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: { id: string }) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
-    await assertModerator(context.supabase, context.userId);
+    const access = await getCourseAccess(context.supabase, context.userId);
+    if (!access.canManageAll) {
+      const { data: existing } = await context.supabase.from("lessons").select("created_by").eq("id", data.id).maybeSingle();
+      if (!existing || existing.created_by !== context.userId) throw new Error("Можно удалять только свои уроки");
+    }
     const { error } = await context.supabase.from("lessons").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };

@@ -100,6 +100,7 @@ export type Database = {
           certification_id: string | null
           cover_url: string | null
           created_at: string
+          created_by: string | null
           description: string | null
           id: string
           is_premium: boolean
@@ -117,6 +118,7 @@ export type Database = {
           certification_id?: string | null
           cover_url?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           id?: string
           is_premium?: boolean
@@ -134,6 +136,7 @@ export type Database = {
           certification_id?: string | null
           cover_url?: string | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           id?: string
           is_premium?: boolean
@@ -532,6 +535,7 @@ export type Database = {
           content_md: string
           cover_url: string | null
           created_at: string
+          created_by: string | null
           difficulty: string
           duration_min: number
           id: string
@@ -552,6 +556,7 @@ export type Database = {
           content_md: string
           cover_url?: string | null
           created_at?: string
+          created_by?: string | null
           difficulty?: string
           duration_min?: number
           id?: string
@@ -572,6 +577,7 @@ export type Database = {
           content_md?: string
           cover_url?: string | null
           created_at?: string
+          created_by?: string | null
           difficulty?: string
           duration_min?: number
           id?: string
@@ -928,6 +934,30 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_permissions: {
+        Row: {
+          can_manage_courses: boolean
+          can_view_finances: boolean
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          can_manage_courses?: boolean
+          can_view_finances?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          can_manage_courses?: boolean
+          can_view_finances?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       track_comments: {
         Row: {
           author_id: string
@@ -1145,7 +1175,9 @@ export type Database = {
         Args: { _actor: string; _target: string }
         Returns: boolean
       }
+      can_manage_all_courses: { Args: { _user_id: string }; Returns: boolean }
       can_moderate: { Args: { _user_id: string }; Returns: boolean }
+      can_view_finances: { Args: { _user_id: string }; Returns: boolean }
       claim_super_admin: { Args: { _actor: string }; Returns: undefined }
       get_or_create_dm_thread: { Args: { _other: string }; Returns: string }
       has_active_subscription: { Args: { _user_id: string }; Returns: boolean }
@@ -1160,6 +1192,15 @@ export type Database = {
       increment_post_play: { Args: { _post_id: string }; Returns: number }
       is_banned: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      log_admin_action: {
+        Args: {
+          _action: string
+          _actor: string
+          _meta?: Json
+          _target: string
+        }
+        Returns: undefined
+      }
       max_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -1179,7 +1220,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user" | "super_admin"
+      app_role: "admin" | "moderator" | "user" | "super_admin" | "teacher"
       course_level: "beginner" | "intermediate" | "pro"
       report_status: "open" | "resolved" | "rejected"
       report_target: "thread" | "reply" | "message" | "post" | "comment"
@@ -1310,7 +1351,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user", "super_admin"],
+      app_role: ["admin", "moderator", "user", "super_admin", "teacher"],
       course_level: ["beginner", "intermediate", "pro"],
       report_status: ["open", "resolved", "rejected"],
       report_target: ["thread", "reply", "message", "post", "comment"],

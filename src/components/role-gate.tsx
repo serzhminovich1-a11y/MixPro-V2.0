@@ -3,7 +3,14 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 
-type RequiredRole = "moderator" | "admin" | "super_admin";
+// "course-editor" / "finance" aren't ranks — they're the additive
+// staff_permissions flags (can_manage_courses / can_view_finances) a
+// super-admin can grant on top of someone's existing role, e.g. a teacher
+// who should manage all courses, or an admin who should see the finance
+// dashboard without becoming super-admin. Rank still satisfies them too
+// (an admin/mod already passes "course-editor"; a super-admin already
+// passes "finance") so nothing that worked before stops working.
+type RequiredRole = "moderator" | "admin" | "super_admin" | "course-editor" | "finance";
 
 /**
  * Client-side role gate. While the admin context loads, shows a spinner.
@@ -17,7 +24,7 @@ export function RoleGate({
   role: RequiredRole;
   children: React.ReactNode;
 }) {
-  const { ready, isAdmin, isSuperAdmin, canModerate } = useAdmin();
+  const { ready, isAdmin, isSuperAdmin, canModerate, canManageCourses, canViewFinances } = useAdmin();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -26,7 +33,11 @@ export function RoleGate({
       ? isSuperAdmin
       : role === "admin"
         ? isAdmin
-        : canModerate;
+        : role === "course-editor"
+          ? canManageCourses
+          : role === "finance"
+            ? canViewFinances
+            : canModerate;
 
   useEffect(() => {
     if (!ready) return;
