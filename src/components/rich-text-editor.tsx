@@ -80,8 +80,33 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
   // *this* when a select's onChange runs.
   const savedRangeRef = useRef<Range | null>(null);
 
+  // TEMPORARY diagnostics for the Brave "can't place the caret" report —
+  // remove once root-caused. Logs to console only; no user-visible effect.
+  const t0 = useRef(performance.now());
+  function dbg(label: string, extra?: unknown) {
+    // eslint-disable-next-line no-console
+    console.log(`[RTE-DEBUG +${(performance.now() - t0.current).toFixed(0)}ms] ${label}`, extra ?? "");
+  }
+  function describeEl(el: Element | null) {
+    if (!el) return null;
+    return `${el.tagName}${el.id ? "#" + el.id : ""}${(el as HTMLElement).className ? "." + String((el as HTMLElement).className).replace(/\s+/g, ".") : ""}`;
+  }
+  function describeSel() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return { none: true };
+    return {
+      collapsed: sel.isCollapsed,
+      anchorOffset: sel.anchorOffset,
+      anchorNode: sel.anchorNode?.nodeType === 3 ? `"${sel.anchorNode.textContent?.slice(0, 30)}"` : describeEl(sel.anchorNode as Element | null),
+      activeElement: describeEl(document.activeElement as Element | null),
+    };
+  }
+
   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = value;
+    if (ref.current && ref.current.innerHTML !== value) {
+      dbg("mount-effect: writing innerHTML from value prop");
+      ref.current.innerHTML = value;
+    }
     setSourceValue(value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -93,7 +118,10 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
   // blank even though the parent's `value` is correct. Do the write here
   // instead, once the div actually exists again.
   useEffect(() => {
-    if (!sourceMode && ref.current) ref.current.innerHTML = sourceValue;
+    if (!sourceMode && ref.current) {
+      dbg("sourceMode-effect: writing innerHTML from sourceValue");
+      ref.current.innerHTML = sourceValue;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceMode]);
 
@@ -110,13 +138,15 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
     // clicks to "take" in Brave (not reproducible in stock Chromium).
     let raf = 0;
     function poll() {
+      dbg("selectionchange (raw event)", describeSel());
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         if (!ref.current) return;
         const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return;
+        if (!sel || sel.rangeCount === 0) { dbg("poll(rAF): no selection"); return; }
         const anchor = sel.anchorNode;
-        if (!anchor || !ref.current.contains(anchor)) return;
+        if (!anchor || !ref.current.contains(anchor)) { dbg("poll(rAF): selection outside editor", describeSel()); return; }
+        dbg("poll(rAF): captured", describeSel());
         if (!sel.isCollapsed) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
         try {
           const fb = document.queryCommandValue("formatBlock");
@@ -398,7 +428,11 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
           contentEditable
           suppressContentEditableWarning
           onInput={commit}
-          onBlur={commit}
+          onBlur={(e) => { commit(); dbg("blur", { relatedTarget: describeEl(e.relatedTarget as Element | null) }); }}
+          onFocus={(e) => dbg("focus", { relatedTarget: describeEl((e as any).relatedTarget ?? null) })}
+          onMouseDown={(e) => dbg("mousedown", { x: e.clientX, y: e.clientY, target: describeEl(e.target as Element) })}
+          onMouseUp={() => dbg("mouseup-selection", describeSel())}
+          onClick={() => dbg("click-selection", describeSel())}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
