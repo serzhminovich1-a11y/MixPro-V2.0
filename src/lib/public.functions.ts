@@ -136,22 +136,51 @@ export const getPosts = createServerFn({ method: "GET" }).handler(async () => {
   return { posts, error: null };
 });
 
+/** Category index for the classic forum homepage: a flat list with
+ * parent_id (client builds the tree), per-category topic/post counts, and
+ * the single latest thread ("last post") each — the info classic forum
+ * software always shows per (sub)forum row. */
 export const getForumCategories = createServerFn({ method: "GET" }).handler(async () => {
   const s = pub();
   const [catsRes, threadsRes] = await Promise.all([
     s.from("forum_categories").select("*").order("order_index", { ascending: true }),
-    s.from("forum_threads").select("id, category_id, last_activity_at").eq("is_hidden", false),
+    s.from("forum_threads").select("id, category_id, title, author_id, last_activity_at").eq("is_hidden", false),
   ]);
   if (catsRes.error) return { categories: [], error: catsRes.error.message };
-  const counts = new Map<string, number>();
-  const latest = new Map<string, string>();
+  const threadIds = (threadsRes.data ?? []).map((t) => t.id);
+  const repliesRes = threadIds.length
+    ? await s.from("forum_replies").select("thread_id").eq("is_hidden", false).in("thread_id", threadIds)
+    : { data: [] as { thread_id: string }[] };
+  const replyCountByThread = new Map<string, number>();
+  for (const r of repliesRes.data ?? []) replyCountByThread.set(r.thread_id, (replyCountByThread.get(r.thread_id) ?? 0) + 1);
+
+  const threadCount = new Map<string, number>();
+  const postCount = new Map<string, number>();
+  const lastThread = new Map<string, { id: string; title: string; author_id: string; last_activity_at: string }>();
   for (const t of threadsRes.data ?? []) {
-    counts.set(t.category_id, (counts.get(t.category_id) ?? 0) + 1);
-    const cur = latest.get(t.category_id);
-    if (!cur || t.last_activity_at > cur) latest.set(t.category_id, t.last_activity_at);
+    threadCount.set(t.category_id, (threadCount.get(t.category_id) ?? 0) + 1);
+    postCount.set(t.category_id, (postCount.get(t.category_id) ?? 0) + 1 + (replyCountByThread.get(t.id) ?? 0));
+    const cur = lastThread.get(t.category_id);
+    if (!cur || t.last_activity_at > cur.last_activity_at) lastThread.set(t.category_id, t);
   }
+
+  const authorIds = [...new Set([...lastThread.values()].map((t) => t.author_id))];
+  const profilesRes = authorIds.length
+    ? await s.from("profiles").select("id, username, avatar_url").in("id", authorIds)
+    : { data: [] as { id: string; username: string; avatar_url: string | null }[] };
+  const profileMap = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
+
   return {
-    categories: (catsRes.data ?? []).map((c) => ({ ...c, thread_count: counts.get(c.id) ?? 0, last_activity_at: latest.get(c.id) ?? null })),
+    categories: (catsRes.data ?? []).map((c) => {
+      const last = lastThread.get(c.id);
+      return {
+        ...c,
+        thread_count: threadCount.get(c.id) ?? 0,
+        post_count: postCount.get(c.id) ?? 0,
+        last_activity_at: last?.last_activity_at ?? null,
+        last_thread: last ? { id: last.id, title: last.title, author: profileMap.get(last.author_id) ?? null, at: last.last_activity_at } : null,
+      };
+    }),
     error: null,
   };
 });
@@ -161,15 +190,22 @@ export const getForumCategoryBySlug = createServerFn({ method: "GET" })
   .handler(async ({ data: input }) => {
     const s = pub();
     const catRes = await s.from("forum_categories").select("*").eq("slug", input.slug).maybeSingle();
-    if (catRes.error || !catRes.data) return { category: null, threads: [], error: catRes.error?.message ?? "not_found" };
-    const threadsRes = await s
-      .from("forum_threads")
-      .select("id, title, author_id, is_pinned, is_locked, is_hidden, last_activity_at, created_at")
-      .eq("category_id", catRes.data.id)
-      .eq("is_hidden", false)
-      .order("is_pinned", { ascending: false })
-      .order("last_activity_at", { ascending: false })
-      .limit(100);
+    if (catRes.error || !catRes.data) return { category: null, parent: null, subforums: [], threads: [], error: catRes.error?.message ?? "not_found" };
+    const cat = catRes.data;
+    const [threadsRes, subforumsRes, parentRes] = await Promise.all([
+      s
+        .from("forum_threads")
+        .select("id, title, author_id, is_pinned, is_locked, is_hidden, last_activity_at, created_at, views")
+        .eq("category_id", cat.id)
+        .eq("is_hidden", false)
+        .order("is_pinned", { ascending: false })
+        .order("last_activity_at", { ascending: false })
+        .limit(100),
+      // Subforums nested directly under this category — same "classic forum"
+      // tree as the homepage, one level deep from wherever we are.
+      s.from("forum_categories").select("*").eq("parent_id", cat.id).order("order_index", { ascending: true }),
+      cat.parent_id ? s.from("forum_categories").select("id, slug, name").eq("id", cat.parent_id).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
     const threadIds = (threadsRes.data ?? []).map((t) => t.id);
     const authorIds = [...new Set((threadsRes.data ?? []).map((t) => t.author_id))];
     const [profilesRes, repliesRes] = await Promise.all([
@@ -188,7 +224,7 @@ export const getForumCategoryBySlug = createServerFn({ method: "GET" })
       author: map.get(t.author_id) ?? null,
       reply_count: counts.get(t.id) ?? 0,
     }));
-    return { category: catRes.data, threads, error: null };
+    return { category: cat, parent: parentRes.data ?? null, subforums: subforumsRes.data ?? [], threads, error: null };
   });
 
 export const getForumThread = createServerFn({ method: "GET" })
@@ -199,14 +235,37 @@ export const getForumThread = createServerFn({ method: "GET" })
     if (threadRes.error || !threadRes.data) return { thread: null, replies: [], error: threadRes.error?.message ?? "not_found" };
     const repliesRes = await s.from("forum_replies").select("*").eq("thread_id", input.id).eq("is_hidden", false).order("created_at", { ascending: true });
     const authorIds = [...new Set([threadRes.data.author_id, ...(repliesRes.data ?? []).map((r) => r.author_id)])];
-    const [profilesRes, catRes] = await Promise.all([
-      s.from("profiles").select("id, username, avatar_url, level").in("id", authorIds),
+    const [profilesRes, catRes, threadPostsRes, replyPostsRes, rolesRes] = await Promise.all([
+      s.from("profiles").select("id, username, avatar_url, level, verified, created_at").in("id", authorIds),
       s.from("forum_categories").select("*").eq("id", threadRes.data.category_id).maybeSingle(),
+      // Total post count per author, site-wide — the "Сообщений: N" line
+      // classic forum software shows under a poster's name. Small
+      // scale for now (id-only columns), fine to compute on every load.
+      s.from("forum_threads").select("author_id").eq("is_hidden", false).in("author_id", authorIds),
+      s.from("forum_replies").select("author_id").eq("is_hidden", false).in("author_id", authorIds),
+      // Staff badge (Модератор/Админ/...) — roles_select_public_staff only
+      // ever returns rows for elevated roles, nothing about regular users.
+      s.from("user_roles").select("user_id, role").in("user_id", authorIds),
     ]);
     const map = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
+    const postCount = new Map<string, number>();
+    for (const row of [...(threadPostsRes.data ?? []), ...(replyPostsRes.data ?? [])]) {
+      postCount.set(row.author_id, (postCount.get(row.author_id) ?? 0) + 1);
+    }
+    const RANK: Record<string, number> = { super_admin: 4, admin: 3, moderator: 2, teacher: 1 };
+    const topRole = new Map<string, string>();
+    for (const r of rolesRes.data ?? []) {
+      const cur = topRole.get(r.user_id);
+      if (!cur || (RANK[r.role] ?? 0) > (RANK[cur] ?? 0)) topRole.set(r.user_id, r.role);
+    }
+    const withAuthor = (authorId: string) => ({
+      ...(map.get(authorId) ?? null),
+      post_count: postCount.get(authorId) ?? 0,
+      role: topRole.get(authorId) ?? null,
+    });
     return {
-      thread: { ...threadRes.data, author: map.get(threadRes.data.author_id) ?? null, category: catRes.data ?? null },
-      replies: (repliesRes.data ?? []).map((r) => ({ ...r, author: map.get(r.author_id) ?? null })),
+      thread: { ...threadRes.data, author: map.get(threadRes.data.author_id) ? withAuthor(threadRes.data.author_id) : null, category: catRes.data ?? null },
+      replies: (repliesRes.data ?? []).map((r) => ({ ...r, author: map.get(r.author_id) ? withAuthor(r.author_id) : null })),
       error: null,
     };
   });

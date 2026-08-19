@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { MessagesSquare, Plus, Pencil, Trash2, X, Loader2 } from "lucide-react";
+import { MessagesSquare, Plus, Pencil, Trash2, X, Loader2, CornerDownRight } from "lucide-react";
 import { getForumCategories } from "@/lib/public.functions";
 import { upsertCategory, deleteCategory } from "@/lib/community.functions";
 import { RoleGate } from "@/components/role-gate";
@@ -26,10 +26,11 @@ type Category = {
   description: string | null;
   icon: string | null;
   order_index: number;
+  parent_id: string | null;
   thread_count: number;
 };
 
-const EMPTY = { id: undefined as string | undefined, slug: "", name: "", description: "", icon: "💬", orderIndex: 0 };
+const EMPTY = { id: undefined as string | undefined, slug: "", name: "", description: "", icon: "💬", orderIndex: 0, parentId: "" };
 
 function AdminForumPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -63,6 +64,7 @@ function AdminForumPage() {
           description: editing.description.trim() || undefined,
           icon: editing.icon.trim() || undefined,
           orderIndex: editing.orderIndex,
+          parentId: editing.parentId || null,
         },
       });
       toast.success(editing.id ? "Категория обновлена" : "Категория создана");
@@ -76,7 +78,7 @@ function AdminForumPage() {
   }
 
   async function remove(c: Category) {
-    if (!confirm(`Удалить категорию «${c.name}»? Все темы в ней тоже удалятся.`)) return;
+    if (!confirm(`Удалить категорию «${c.name}»? Все темы в ней (и в подразделах) тоже удалятся.`)) return;
     try {
       await _delete({ data: { id: c.id } });
       toast.success("Категория удалена");
@@ -84,6 +86,53 @@ function AdminForumPage() {
     } catch (e) {
       toast.error((e as Error).message);
     }
+  }
+
+  // Only top-level categories are offered as a parent — keeps the tree at
+  // exactly two levels (category → subforum) by construction, no cycle
+  // detection needed. Editing an existing top-level category also drops
+  // itself from the list (can't be its own parent).
+  const parentOptions = categories.filter((c) => !c.parent_id && c.id !== editing?.id);
+  const byParent = new Map<string | null, Category[]>();
+  for (const c of categories) {
+    const key = c.parent_id ?? null;
+    byParent.set(key, [...(byParent.get(key) ?? []), c]);
+  }
+  const topLevel = (byParent.get(null) ?? []).slice().sort((a, b) => a.order_index - b.order_index);
+
+  function openEdit(c: Category) {
+    setEditing({
+      id: c.id,
+      slug: c.slug,
+      name: c.name,
+      description: c.description ?? "",
+      icon: c.icon ?? "💬",
+      orderIndex: c.order_index,
+      parentId: c.parent_id ?? "",
+    });
+  }
+
+  function Row({ c, indented }: { c: Category; indented?: boolean }) {
+    return (
+      <div className={`panel flex items-center gap-3 rounded-xl p-4 ${indented ? "ml-6" : ""}`}>
+        {indented && <CornerDownRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-secondary text-xl">{c.icon ?? "💬"}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">{c.name}</h3>
+            <span className="font-mono text-[10px] text-muted-foreground">/{c.slug}</span>
+          </div>
+          {c.description && <p className="truncate text-xs text-muted-foreground">{c.description}</p>}
+        </div>
+        <span className="font-mono text-[11px] text-muted-foreground">{c.thread_count} тем</span>
+        <button onClick={() => openEdit(c)} className="rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground" title="Редактировать">
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button onClick={() => remove(c)} className="rounded p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive" title="Удалить">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -95,7 +144,7 @@ function AdminForumPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold">Категории форума</h1>
-            <p className="text-xs text-muted-foreground">Создание, правка и удаление разделов форума.</p>
+            <p className="text-xs text-muted-foreground">Создание, правка и удаление разделов и подразделов форума.</p>
           </div>
         </div>
         <button
@@ -152,6 +201,20 @@ function AdminForumPage() {
               />
             </div>
             <div className="sm:col-span-2">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Родительская категория (необязательно)</label>
+              <select
+                value={editing.parentId}
+                onChange={(e) => setEditing({ ...editing, parentId: e.target.value })}
+                className="mt-1 w-full rounded border border-input bg-background px-2.5 py-1.5 text-sm outline-none"
+              >
+                <option value="">— Верхний уровень —</option>
+                {parentOptions.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-muted-foreground">Если выбрать родителя, эта категория станет подразделом (вложенным разделом) внутри него.</p>
+            </div>
+            <div className="sm:col-span-2">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Описание</label>
               <textarea
                 value={editing.description}
@@ -180,45 +243,15 @@ function AdminForumPage() {
         ) : categories.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Категорий пока нет.</p>
         ) : (
-          categories
-            .slice()
-            .sort((a, b) => a.order_index - b.order_index)
-            .map((c) => (
-              <div key={c.id} className="panel flex items-center gap-3 rounded-xl p-4">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-secondary text-xl">{c.icon ?? "💬"}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold">{c.name}</h3>
-                    <span className="font-mono text-[10px] text-muted-foreground">/{c.slug}</span>
-                  </div>
-                  {c.description && <p className="truncate text-xs text-muted-foreground">{c.description}</p>}
-                </div>
-                <span className="font-mono text-[11px] text-muted-foreground">{c.thread_count} тем</span>
-                <button
-                  onClick={() =>
-                    setEditing({
-                      id: c.id,
-                      slug: c.slug,
-                      name: c.name,
-                      description: c.description ?? "",
-                      icon: c.icon ?? "💬",
-                      orderIndex: c.order_index,
-                    })
-                  }
-                  className="rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  title="Редактировать"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => remove(c)}
-                  className="rounded p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
-                  title="Удалить"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+          topLevel.map((parent) => {
+            const children = (byParent.get(parent.id) ?? []).slice().sort((a, b) => a.order_index - b.order_index);
+            return (
+              <div key={parent.id} className="space-y-2">
+                <Row c={parent} />
+                {children.map((c) => <Row key={c.id} c={c} indented />)}
               </div>
-            ))
+            );
+          })
         )}
       </div>
     </div>

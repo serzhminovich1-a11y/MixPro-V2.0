@@ -234,6 +234,7 @@ export type Database = {
           id: string
           name: string
           order_index: number
+          parent_id: string | null
           slug: string
         }
         Insert: {
@@ -243,6 +244,7 @@ export type Database = {
           id?: string
           name: string
           order_index?: number
+          parent_id?: string | null
           slug: string
         }
         Update: {
@@ -252,9 +254,18 @@ export type Database = {
           id?: string
           name?: string
           order_index?: number
+          parent_id?: string | null
           slug?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "forum_categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "forum_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       forum_replies: {
         Row: {
@@ -307,6 +318,7 @@ export type Database = {
           last_activity_at: string
           title: string
           updated_at: string
+          views: number
         }
         Insert: {
           author_id: string
@@ -320,6 +332,7 @@ export type Database = {
           last_activity_at?: string
           title: string
           updated_at?: string
+          views?: number
         }
         Update: {
           author_id?: string
@@ -333,6 +346,7 @@ export type Database = {
           last_activity_at?: string
           title?: string
           updated_at?: string
+          views?: number
         }
         Relationships: [
           {
@@ -1190,6 +1204,7 @@ export type Database = {
       }
       increment_downloads: { Args: { _preset_id: string }; Returns: undefined }
       increment_post_play: { Args: { _post_id: string }; Returns: number }
+      increment_thread_views: { Args: { _thread_id: string }; Returns: undefined }
       is_banned: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       log_admin_action: {

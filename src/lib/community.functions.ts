@@ -222,10 +222,10 @@ export const deleteReply = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Moderator: create/update a forum category. */
+/** Moderator: create/update a forum category (or subforum, if parentId is set). */
 export const upsertCategory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { id?: string; slug: string; name: string; description?: string; icon?: string; orderIndex?: number }) =>
+  .validator((input: { id?: string; slug: string; name: string; description?: string; icon?: string; orderIndex?: number; parentId?: string | null }) =>
     z.object({
       id: z.string().uuid().optional(),
       slug: z.string().trim().min(1).max(60).regex(/^[a-z0-9-]+$/, "только латиница, цифры и -"),
@@ -233,17 +233,20 @@ export const upsertCategory = createServerFn({ method: "POST" })
       description: z.string().trim().max(300).optional(),
       icon: z.string().trim().max(8).optional(),
       orderIndex: z.number().int().min(0).max(999).optional(),
+      parentId: z.string().uuid().nullable().optional(),
     }).parse(input),
   )
   .handler(async ({ data, context }) => {
     const { data: ok } = await context.supabase.rpc("can_moderate", { _user_id: context.userId });
     if (!ok) throw new Error("Недостаточно прав");
+    if (data.parentId && data.parentId === data.id) throw new Error("Раздел не может быть подразделом самого себя");
     const payload = {
       slug: data.slug,
       name: data.name,
       description: data.description ?? null,
       icon: data.icon ?? null,
       order_index: data.orderIndex ?? 0,
+      parent_id: data.parentId ?? null,
     };
     const { error } = data.id
       ? await context.supabase.from("forum_categories").update(payload).eq("id", data.id)
