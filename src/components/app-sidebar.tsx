@@ -11,7 +11,6 @@ import {
   GraduationCap,
   Gauge,
   ScrollText,
-  MessagesSquare,
   User as UserIcon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -55,7 +54,6 @@ const groups: Group[] = [
       { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "ADM" },
       { label: "Глоссарий", to: "/admin/glossary", icon: Library, badge: "ADM" },
       { label: "Библиотека лупов", to: "/admin/loops", icon: Waves, badge: "ADM" },
-      { label: "Категории форума", to: "/admin/forum", icon: MessagesSquare, badge: "ADM" },
       { label: "Модерация", to: "/moderation", icon: ShieldAlert, badge: "ADM" },
     ],
   },
@@ -74,7 +72,6 @@ const groups: Group[] = [
       { label: "Модерация", to: "/moderation", icon: ShieldAlert, badge: "MOD" },
       { label: "Журнал действий", to: "/admin/log", icon: ScrollText, badge: "MOD" },
       { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "MOD" },
-      { label: "Категории форума", to: "/admin/forum", icon: MessagesSquare, badge: "MOD" },
     ],
   },
   {

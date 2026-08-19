@@ -7,7 +7,6 @@ import {
   Gamepad2,
   GraduationCap,
   SlidersHorizontal,
-  MessagesSquare,
   MessageCircle,
   Play,
   Square,
@@ -41,7 +40,9 @@ const tools = [
 
   { to: "/glossary", label: "Термины", icon: BookMarked },
   { to: "/presets", label: "Пресеты", icon: SlidersHorizontal },
-  { to: "/forum", label: "Форум", icon: MessagesSquare },
+  // "Форум" pulled from the nav by request — the pages/data stay as-is,
+  // just unreachable from here. Re-add `{ to: "/forum", label: "Форум",
+  // icon: MessagesSquare },` to bring it back.
   { to: "/chat", label: "Чат", icon: MessageCircle },
 ] as const;
 
