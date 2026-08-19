@@ -51,7 +51,6 @@ const groups: Group[] = [
     items: [
       { label: "Дашборд", to: "/admin/dashboard", icon: Gauge, badge: "ADM" },
       { label: "Пользователи", to: "/admin", icon: Users, badge: "ADM" },
-      { label: "Команда", to: "/admin/team", icon: UserCog, badge: "ADM" },
       { label: "Журнал действий", to: "/admin/log", icon: ScrollText, badge: "ADM" },
       { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "ADM" },
       { label: "Глоссарий", to: "/admin/glossary", icon: Library, badge: "ADM" },
@@ -63,7 +62,7 @@ const groups: Group[] = [
   {
     // Plain moderators (rank 1, not also admin+) previously had no sidebar
     // entries at all despite already having real RoleGate access to these
-    // five pages — content moderation/editing tools specifically, not the
+    // four pages — content moderation/editing tools specifically, not the
     // admin-only ones (Пользователи/Дашборд/Глоссарий/Библиотека лупов
     // need rank >= 2) or super-admin-only ones. Surfacing what's already
     // theirs, not widening any actual permission.
@@ -76,7 +75,6 @@ const groups: Group[] = [
       { label: "Журнал действий", to: "/admin/log", icon: ScrollText, badge: "MOD" },
       { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "MOD" },
       { label: "Категории форума", to: "/admin/forum", icon: MessagesSquare, badge: "MOD" },
-      { label: "Команда", to: "/admin/team", icon: UserCog, badge: "MOD" },
     ],
   },
   {
@@ -88,6 +86,7 @@ const groups: Group[] = [
       { label: "Роли и права", to: "/admin", hash: "roles", icon: Shield, badge: "SU" },
       { label: "Подписки", to: "/admin", hash: "subs", icon: Crown, badge: "SU" },
       { label: "Выручка и аналитика", to: "/admin/subscriptions", icon: CreditCard, badge: "SU" },
+      { label: "Команда", to: "/admin/team", icon: UserCog, badge: "SU" },
     ],
   },
   {

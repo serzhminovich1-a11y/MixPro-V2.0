@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { UserCog, Loader2, ShieldAlert, Info, BadgeCheck } from "lucide-react";
+import { UserCog, Loader2, Info, BadgeCheck } from "lucide-react";
 import { getStaffRoster, setStaffPermission } from "@/lib/admin.functions";
 import { RoleGate } from "@/components/role-gate";
-import { useAdmin } from "@/hooks/use-admin";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 import { toast } from "sonner";
 import { ROLE_ORDER, ROLE_LABEL, ROLE_DOT, ROLE_RULES, type StaffRole } from "@/lib/role-rules";
@@ -12,7 +11,7 @@ import { ROLE_ORDER, ROLE_LABEL, ROLE_DOT, ROLE_RULES, type StaffRole } from "@/
 export const Route = createFileRoute("/_authenticated/admin/team")({
   head: () => ({ meta: [{ title: "Команда — MixPro" }, { name: "robots", content: "noindex" }] }),
   component: () => (
-    <RoleGate role="moderator">
+    <RoleGate role="super_admin">
       <AdminTeamPage />
     </RoleGate>
   ),
@@ -59,7 +58,6 @@ function AdminTeamPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const fetchRoster = useServerFn(getStaffRoster);
   const toggle = useServerFn(setStaffPermission);
-  const { isSuperAdmin } = useAdmin();
 
   useEffect(() => {
     fetchRoster({})
@@ -154,21 +152,21 @@ function AdminTeamPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 text-xs">
-                  <label className={`flex items-center gap-1.5 ${isSuperAdmin ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
+                  <label className="flex cursor-pointer items-center gap-1.5">
                     <input
                       type="checkbox"
                       checked={m.canManageCourses}
-                      disabled={!isSuperAdmin || busy === `${m.id}:can_manage_courses`}
+                      disabled={busy === `${m.id}:can_manage_courses`}
                       onChange={(e) => onToggle(m.id, "can_manage_courses", e.target.checked)}
                       className="h-3.5 w-3.5 accent-mint"
                     />
                     Все курсы
                   </label>
-                  <label className={`flex items-center gap-1.5 ${isSuperAdmin ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
+                  <label className="flex cursor-pointer items-center gap-1.5">
                     <input
                       type="checkbox"
                       checked={m.canViewFinances}
-                      disabled={!isSuperAdmin || busy === `${m.id}:can_view_finances`}
+                      disabled={busy === `${m.id}:can_view_finances`}
                       onChange={(e) => onToggle(m.id, "can_view_finances", e.target.checked)}
                       className="h-3.5 w-3.5 accent-mint"
                     />
@@ -179,12 +177,6 @@ function AdminTeamPage() {
               </li>
             ))}
           </ul>
-        )}
-
-        {!isSuperAdmin && (
-          <p className="mt-4 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <ShieldAlert className="h-3 w-3" /> Менять права может только супер-админ — здесь только просмотр.
-          </p>
         )}
       </div>
     </div>

@@ -420,14 +420,14 @@ export const listAdminActions = createServerFn({ method: "POST" })
 
 /** Roster of everyone with a staff role (teacher/moderator/admin/
  * super_admin) or an extra staff_permissions grant, for the "Команда"
- * page. Moderator+ can view (matches everywhere else that shows the team
- * makeup); only super_admin can actually change anything from there. */
+ * page. Super-admin only, by request — the roster and who's been granted
+ * what stays visible only at the top. */
 export const getStaffRoster = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data: myRoles } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
     const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, RANKS[r.role] ?? 0), 0);
-    if (myRank < 1) throw new Error("Недостаточно прав");
+    if (myRank < 3) throw new Error("Только для супер-админа");
 
     const [{ data: roles }, { data: perms }] = await Promise.all([
       context.supabase.from("user_roles").select("user_id, role"),
