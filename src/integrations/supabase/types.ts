@@ -796,6 +796,7 @@ export type Database = {
           is_hidden: boolean
           media_urls: string[]
           play_count: number
+          repost_of: string | null
           title: string | null
           tracks: Json
         }
@@ -808,6 +809,7 @@ export type Database = {
           is_hidden?: boolean
           media_urls?: string[]
           play_count?: number
+          repost_of?: string | null
           title?: string | null
           tracks?: Json
         }
@@ -820,10 +822,19 @@ export type Database = {
           is_hidden?: boolean
           media_urls?: string[]
           play_count?: number
+          repost_of?: string | null
           title?: string | null
           tracks?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "posts_repost_of_fkey"
+            columns: ["repost_of"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       presets: {
         Row: {

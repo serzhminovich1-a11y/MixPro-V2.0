@@ -124,7 +124,7 @@ export const getPresets = createServerFn({ method: "GET" }).handler(async () => 
 
 export const getPosts = createServerFn({ method: "GET" }).handler(async () => {
   const s = pub();
-  const postsRes = await s.from("posts").select("id, author_id, content, created_at").eq("is_hidden", false).order("created_at", { ascending: false }).limit(50);
+  const postsRes = await s.from("posts").select("id, author_id, content, created_at, repost_of").eq("is_hidden", false).order("created_at", { ascending: false }).limit(50);
   if (postsRes.error) return { posts: [], error: postsRes.error.message };
   const postIds = (postsRes.data ?? []).map((p) => p.id);
   const [likesRes, commentsRes] = postIds.length
@@ -133,20 +133,39 @@ export const getPosts = createServerFn({ method: "GET" }).handler(async () => {
         s.from("post_comments").select("id, post_id, author_id, content, created_at").eq("is_hidden", false).in("post_id", postIds).order("created_at", { ascending: true }),
       ])
     : [{ data: [] as { post_id: string; user_id: string }[] }, { data: [] as { id: string; post_id: string; author_id: string; content: string; created_at: string }[] }];
+  // Reposts point at another `posts` row — fetch those originals in one
+  // extra batched query (not per-row) and join client-side, same pattern
+  // as everywhere else in this file. Not filtered by is_hidden here: a
+  // hidden original still needs to resolve so the repost can show "оригинал
+  // скрыт" instead of leaking its content or silently breaking.
+  const repostIds = [...new Set((postsRes.data ?? []).map((p) => p.repost_of).filter((id): id is string => !!id))];
+  const originalsRes = repostIds.length
+    ? await s.from("posts").select("id, author_id, content, title, is_hidden").in("id", repostIds)
+    : { data: [] as { id: string; author_id: string; content: string; title: string | null; is_hidden: boolean }[] };
   const authorIds = [...new Set([
     ...(postsRes.data ?? []).map((p) => p.author_id),
     ...(commentsRes.data ?? []).map((c) => c.author_id),
+    ...(originalsRes.data ?? []).map((o) => o.author_id),
   ])];
   const profilesRes = authorIds.length
     ? await s.from("profiles").select("id, username, avatar_url, level").in("id", authorIds)
     : { data: [] as { id: string; username: string; avatar_url: string | null; level: number }[] };
   const map = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
-  const posts = (postsRes.data ?? []).map((post) => ({
-    ...post,
-    author: map.get(post.author_id) ?? null,
-    likes: (likesRes.data ?? []).filter((l) => l.post_id === post.id).map((l) => l.user_id),
-    comments: (commentsRes.data ?? []).filter((c) => c.post_id === post.id).map((c) => ({ ...c, author: map.get(c.author_id) ?? null })),
-  }));
+  const originalMap = new Map((originalsRes.data ?? []).map((o) => [o.id, o]));
+  const posts = (postsRes.data ?? []).map((post) => {
+    const original = post.repost_of ? originalMap.get(post.repost_of) : undefined;
+    return {
+      ...post,
+      author: map.get(post.author_id) ?? null,
+      likes: (likesRes.data ?? []).filter((l) => l.post_id === post.id).map((l) => l.user_id),
+      comments: (commentsRes.data ?? []).filter((c) => c.post_id === post.id).map((c) => ({ ...c, author: map.get(c.author_id) ?? null })),
+      original: original
+        ? { id: original.id, title: original.title, content: original.is_hidden ? null : original.content, author: map.get(original.author_id) ?? null, hidden: original.is_hidden }
+        : post.repost_of
+          ? { id: post.repost_of, title: null, content: null, author: null, hidden: true } // original was deleted (repost_of survives as null via FK, but the id can still be in-flight momentarily) or not found
+          : null,
+    };
+  });
   return { posts, error: null };
 });
 
