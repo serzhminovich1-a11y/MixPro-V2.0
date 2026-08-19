@@ -57,7 +57,10 @@ export const exportUsersXlsx = createServerFn({ method: "POST" })
     // its own admin-rank check server-side.
     const emailByUser = new Map<string, string>();
     try {
-      const { data } = await context.supabase.rpc("admin_list_user_emails", { _actor: context.userId });
+      // No _actor param — the RPC reads auth.uid() itself now (20260819114500
+      // fixed a real bug where a client-supplied _actor let anyone spoof any
+      // admin's identity and read every user's email).
+      const { data } = await context.supabase.rpc("admin_list_user_emails");
       for (const row of (data ?? []) as { id: string; email: string | null }[]) {
         if (row.email) emailByUser.set(row.id, row.email);
       }

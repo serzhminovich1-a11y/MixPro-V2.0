@@ -1156,7 +1156,7 @@ export type Database = {
         Returns: string
       }
       admin_list_user_emails: {
-        Args: { _actor: string }
+        Args: Record<PropertyKey, never>
         Returns: { id: string; email: string | null }[]
       }
       admin_set_subscription: {
