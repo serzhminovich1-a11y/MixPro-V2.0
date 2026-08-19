@@ -102,42 +102,46 @@ function PublicProfilePage() {
   const badges: ProfileBadge[] = (data.certs ?? []).map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon, awardedAt: c.awarded_at }));
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-14">
-      <div className="panel overflow-hidden rounded-2xl">
-        {/* Banner — a tall, dimmed hero image (Steam-style profile backdrop)
-            when there's an actual photo to show. Without one, a big empty
-            gradient block is just dead space, so it collapses back down to
-            a slim accent-tinted strip instead — same treatment as the
-            owner's own view, just read-only here. */}
-        <div className={`relative w-full overflow-hidden bg-secondary ${p.banner_url ? "h-40 sm:h-56" : "h-16 sm:h-20"}`} style={{ background: p.banner_url ? undefined : `linear-gradient(135deg, ${accent}33, transparent)` }}>
+    <>
+      {/* Full-bleed hero — spans the whole viewport width instead of a small
+          boxed card, same treatment as the owner's own view, read-only here. */}
+      <div className="relative left-1/2 right-1/2 -mx-[50vw] w-screen">
+        <div className={`relative w-full overflow-hidden bg-secondary ${p.banner_url ? "h-72 sm:h-[28rem]" : "h-40 sm:h-56"}`} style={{ background: p.banner_url ? undefined : `radial-gradient(120% 140% at 20% 0%, ${accent}33, transparent 60%), var(--background)` }}>
+          {!p.banner_url && (
+            <div className="absolute inset-0 opacity-40" style={{ backgroundImage: `radial-gradient(circle at 1px 1px, ${accent}22 1px, transparent 0)`, backgroundSize: "18px 18px" }} />
+          )}
           <BannerImage path={p.banner_url} className="h-full w-full object-cover" style={{ filter: "brightness(0.62) saturate(1.15)" }} />
-          {p.banner_url && <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--panel) 96%)" }} />}
+          <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 35%, var(--background) 96%)" }} />
         </div>
-        <div className="p-6 md:p-8">
-        <div className="-mt-10 flex flex-wrap items-start gap-4 sm:-mt-8">
-          <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full border-4 border-card bg-secondary text-lg font-bold text-mint">
+
+        {/* relative z-10: see profile.tsx — the banner above is
+            `position: relative`, which paints after static siblings
+            regardless of DOM order unless this is positioned too. */}
+        <div className="relative z-10 mx-auto max-w-4xl px-4 pb-6">
+        <div className="-mt-20 flex flex-wrap items-start gap-6 sm:-mt-24">
+          <div className="grid h-32 w-32 shrink-0 place-items-center overflow-hidden rounded-2xl border-4 border-background bg-secondary text-4xl font-bold text-mint sm:h-40 sm:w-40" style={{ boxShadow: `0 0 32px -6px ${accent}b0` }}>
             <AvatarImage path={p.avatar_url} fallback={p.username.slice(0, 2).toUpperCase()} className={p.avatar_url ? "h-full w-full object-cover" : ""} />
           </div>
-          <div className="min-w-0 flex-1 pt-8 sm:pt-6">
+          <div className="min-w-0 flex-1 pt-16 sm:pt-20">
             <div className="flex items-center gap-2">
-              <h1 className="truncate text-2xl font-bold" style={{ fontFamily: nameFont }}>@{p.username}</h1>
+              <h1 className="truncate text-3xl font-bold sm:text-4xl" style={{ fontFamily: nameFont }}>@{p.username}</h1>
               {p.verified && <BadgeCheck className="h-5 w-5 text-cyan" />}
             </div>
-            {p.full_name && <p className="mt-0.5 truncate text-sm font-medium text-foreground/90">{p.full_name}</p>}
+            {p.full_name && <p className="mt-1 truncate text-sm font-medium text-foreground/90">{p.full_name}</p>}
             {/* Each stat is its own self-contained chip (not text joined by
                 "·" separators) — with flex-wrap, a standalone separator
                 span can end up orphaned alone at the end of a wrapped
                 line, which is exactly what happened here before. */}
-            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-1.5 py-0.5"><Zap className="h-3 w-3 text-mint" />{p.xp ?? 0} XP</span>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1 rounded-md bg-secondary/60 px-1.5 py-0.5"><Zap className="h-3 w-3 text-mint" />{p.xp ?? 0} XP</span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-violet/40 bg-violet/10 py-0.5 pl-0.5 pr-2 font-semibold text-violet">
                 <span className="grid h-4 w-4 place-items-center rounded-full bg-violet/25 font-mono text-[9px]">{p.level ?? 1}</span>
                 Уровень
               </span>
               {league && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-1.5 py-0.5"><Trophy className="h-3 w-3" style={{ color: league.color }} />{league.name}</span>
+                <span className="inline-flex items-center gap-1 rounded-md bg-secondary/60 px-1.5 py-0.5"><Trophy className="h-3 w-3" style={{ color: league.color }} />{league.name}</span>
               )}
-              <span className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-1.5 py-0.5"><Clock className="h-3 w-3" />{tenureLabel(p.created_at)}</span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-secondary/60 px-1.5 py-0.5"><Clock className="h-3 w-3" />{tenureLabel(p.created_at)}</span>
             </div>
             <div className="mt-2 flex items-center gap-3 text-xs">
               <span><span className="font-semibold text-foreground">{followerCount}</span> <span className="text-muted-foreground">подписчиков</span></span>
@@ -152,7 +156,7 @@ function PublicProfilePage() {
                 onClick={toggleFollow}
                 disabled={followBusy}
                 className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
-                  following ? "border border-border hover:bg-secondary" : "bg-primary text-primary-foreground hover:opacity-90"
+                  following ? "border border-border bg-background/80 backdrop-blur hover:bg-secondary" : "bg-primary text-primary-foreground hover:opacity-90"
                 }`}
               >
                 {followBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : following ? <UserCheck className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
@@ -162,7 +166,7 @@ function PublicProfilePage() {
                 type="button"
                 onClick={openDm}
                 disabled={dmBusy}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold hover:bg-secondary disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background/80 px-3 py-1.5 text-xs font-semibold backdrop-blur hover:bg-secondary disabled:opacity-50"
               >
                 {dmBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageSquare className="h-3.5 w-3.5" />}
                 Написать
@@ -170,13 +174,16 @@ function PublicProfilePage() {
             </div>
           )}
           {!isOwnProfile && !viewerId && (
-            <Link to="/auth" className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold hover:bg-secondary">
+            <Link to="/auth" className="shrink-0 rounded-lg border border-border bg-background/80 px-3 py-1.5 text-xs font-semibold backdrop-blur hover:bg-secondary">
               Войдите, чтобы подписаться
             </Link>
           )}
         </div>
+        </div>
+      </div>
 
-        {p.bio && <p className="mt-5 whitespace-pre-wrap text-sm text-foreground/85">{p.bio}</p>}
+      <div className="mx-auto max-w-3xl px-4 pb-14">
+        {p.bio && <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">{p.bio}</p>}
 
         {socials.length > 0 && (
           <div className="mt-5">
@@ -186,7 +193,7 @@ function PublicProfilePage() {
         )}
 
         {badges.length > 0 && (
-          <div className="mt-5">
+          <div className="glass mt-5 rounded-2xl p-5">
             <CertBadgeRow badges={badges} />
           </div>
         )}
@@ -198,8 +205,7 @@ function PublicProfilePage() {
           <Link to="/leaderboard" className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary">Рейтинг</Link>
           <Link to="/community" className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary">Сообщество</Link>
         </div>
-        </div>
       </div>
-    </div>
+    </>
   );
 }

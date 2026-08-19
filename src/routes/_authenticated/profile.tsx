@@ -491,24 +491,29 @@ function ProfilePage() {
   const nameFont = fontFamily(profile?.display_font);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10">
+    <>
       <UploadProgressPanel uploads={uploads} />
-      {/* Header card */}
-      <div className="glass overflow-hidden rounded-2xl">
-        {/* Banner — a tall, dimmed hero image (Steam-style profile backdrop)
-            that fades into the card's own background at the bottom, when
-            there's actually a photo to show. Without one, that much empty
-            gradient is just dead space (this is the state every account
-            starts in), so it collapses to a slim accent-tinted strip
-            instead — same as it was before this pass. */}
-        <div className={`group relative w-full overflow-hidden bg-secondary ${bannerSigned ? "h-44 sm:h-64" : "h-20 sm:h-28"}`} style={{ background: bannerSigned ? undefined : `linear-gradient(135deg, ${accent}33, transparent)` }}>
+      {/* Full-bleed hero — spans the whole viewport width instead of living
+          inside a small boxed card, so the header actually reads as a
+          showcase page (Steam-style) instead of a form floating in a sea
+          of empty background. Breaks out of the page's centered container
+          with the standard "100vw bleed" trick. */}
+      <div className="relative left-1/2 right-1/2 -mx-[50vw] w-screen">
+        {/* Banner — a genuinely large, dimmed hero image when there's an
+            actual photo to show. Without one, it's still full-width and
+            sized with real presence (not a token strip), just carrying a
+            subtle dot-texture + accent glow instead of a flat empty block. */}
+        <div className={`group relative w-full overflow-hidden bg-secondary ${bannerSigned ? "h-72 sm:h-[28rem]" : "h-40 sm:h-56"}`} style={{ background: bannerSigned ? undefined : `radial-gradient(120% 140% at 20% 0%, ${accent}33, transparent 60%), var(--background)` }}>
+          {!bannerSigned && (
+            <div className="absolute inset-0 opacity-40" style={{ backgroundImage: `radial-gradient(circle at 1px 1px, ${accent}22 1px, transparent 0)`, backgroundSize: "18px 18px" }} />
+          )}
           {bannerSigned && <img src={bannerSigned} alt="" className="h-full w-full object-cover" style={{ filter: "brightness(0.62) saturate(1.15)" }} />}
-          {bannerSigned && <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, var(--panel) 96%)" }} />}
+          <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 35%, var(--background) 96%)" }} />
           <button
             type="button"
             onClick={() => bannerInputRef.current?.click()}
             disabled={uploadingBanner}
-            className="absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-black/50 px-2.5 py-1.5 text-xs font-semibold text-white opacity-0 backdrop-blur transition-opacity hover:bg-black/70 disabled:opacity-50 group-hover:opacity-100 sm:opacity-100"
+            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-black/50 px-2.5 py-1.5 text-xs font-semibold text-white opacity-0 backdrop-blur transition-opacity hover:bg-black/70 disabled:opacity-50 group-hover:opacity-100 sm:opacity-100"
           >
             <ImagePlus className="h-3.5 w-3.5" /> {bannerSigned ? "Сменить баннер" : "Добавить баннер"}
           </button>
@@ -524,12 +529,17 @@ function ProfilePage() {
           )}
         </div>
 
-        <div className="p-6 md:p-8">
-        <div className="-mt-16 flex flex-wrap items-start gap-6 sm:-mt-12">
+        {/* relative z-10: the banner above is `position: relative` (for its
+            own absolutely-positioned overlay children), which — per CSS
+            stacking rules — paints *after* plain static siblings regardless
+            of DOM order. Without this, the negative margin below pulls the
+            avatar/name underneath the banner instead of over it. */}
+        <div className="relative z-10 mx-auto max-w-4xl px-4 pb-6">
+        <div className="-mt-20 flex flex-wrap items-start gap-6 sm:-mt-24">
           <div className="relative">
             <div
-              className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-background bg-secondary text-4xl font-bold text-mint"
-              style={{ boxShadow: `0 0 20px -4px ${accent}8c` }}
+              className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-background bg-secondary text-5xl font-bold text-mint sm:h-40 sm:w-40"
+              style={{ boxShadow: `0 0 32px -6px ${accent}b0` }}
             >
               {avatarSigned ? <img src={avatarSigned} alt="" className="h-full w-full object-cover" /> : (profile?.username ?? "U")[0].toUpperCase()}
             </div>
@@ -549,7 +559,7 @@ function ProfilePage() {
             )}
           </div>
 
-          <div className="min-w-0 flex-1 pt-12 sm:pt-8">
+          <div className="min-w-0 flex-1 pt-16 sm:pt-20">
             {editing ? (
               <div className="space-y-2">
                 <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="Никнейм" maxLength={30}
@@ -610,7 +620,7 @@ function ProfilePage() {
             ) : (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="truncate text-2xl font-bold" style={{ fontFamily: nameFont }}>{profile?.username ?? "..."}</h1>
+                  <h1 className="truncate text-3xl font-bold sm:text-4xl" style={{ fontFamily: nameFont }}>{profile?.username ?? "..."}</h1>
                   {profile?.verified && (
                     <span title="Верифицированный аккаунт" className="inline-flex items-center gap-1 rounded-md border border-cyan-400/50 bg-cyan-400/10 px-1.5 py-0.5 text-xs font-semibold text-cyan-300">
                       <BadgeCheck className="h-3.5 w-3.5" />
@@ -677,18 +687,19 @@ function ProfilePage() {
                     <div className="h-full rounded-full transition-all" style={{ width: `${leagueProgress.pct}%`, background: "var(--gradient-neon)" }} />
                   </div>
                 </div>
-
-                {badges.length > 0 && (
-                  <div className="mt-5">
-                    <CertBadgeRow badges={badges} />
-                  </div>
-                )}
               </>
             )}
           </div>
         </div>
         </div>
       </div>
+
+      <div className="mx-auto max-w-4xl px-4 pb-10">
+      {badges.length > 0 && (
+        <div className="glass mt-4 rounded-2xl p-5 md:p-6">
+          <CertBadgeRow badges={badges} />
+        </div>
+      )}
 
       {/* Subscription */}
       <div id="subscription" className="glass mt-4 scroll-mt-20 rounded-2xl p-5 md:p-6">
@@ -1021,7 +1032,8 @@ function ProfilePage() {
           </table>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 
