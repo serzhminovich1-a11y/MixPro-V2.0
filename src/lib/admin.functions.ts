@@ -376,10 +376,11 @@ export const getAdminStats = createServerFn({ method: "GET" })
 /** Paginated audit log of admin/super-admin actions. Moderator+ can view. */
 export const listAdminActions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { limit?: number; before?: string }) =>
+  .validator((input: { limit?: number; before?: string; actorId?: string }) =>
     z.object({
       limit: z.number().int().min(1).max(200).optional(),
       before: z.string().datetime().optional(),
+      actorId: z.string().uuid().optional(),
     }).parse(input),
   )
   .handler(async ({ data, context }) => {
@@ -395,6 +396,7 @@ export const listAdminActions = createServerFn({ method: "POST" })
       .order("created_at", { ascending: false })
       .limit(data.limit ?? 50);
     if (data.before) q = q.lt("created_at", data.before);
+    if (data.actorId) q = q.eq("actor_id", data.actorId);
     const { data: rows, error } = await q;
     if (error) throw new Error(error.message);
 
