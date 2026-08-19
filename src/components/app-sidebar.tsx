@@ -24,6 +24,7 @@ import {
   ShieldAlert,
   Bell,
   Crown,
+  CreditCard,
 } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 
@@ -62,6 +63,7 @@ const groups: Group[] = [
     items: [
       { label: "Роли и права", to: "/admin", hash: "roles", icon: Shield, badge: "SU" },
       { label: "Подписки", to: "/admin", hash: "subs", icon: Crown, badge: "SU" },
+      { label: "Выручка и аналитика", to: "/admin/subscriptions", icon: CreditCard, badge: "SU" },
     ],
   },
 ];

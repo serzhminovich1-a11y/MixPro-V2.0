@@ -50,6 +50,7 @@ import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authentic
 import { Route as ForumThreadIdRouteImport } from './routes/forum.thread.$id'
 import { Route as AuthenticatedPostPostIdRouteImport } from './routes/_authenticated/post.$postId'
 import { Route as AuthenticatedMessagesThreadIdRouteImport } from './routes/_authenticated/messages.$threadId'
+import { Route as AuthenticatedAdminSubscriptionsRouteImport } from './routes/_authenticated/admin.subscriptions'
 import { Route as AuthenticatedAdminLoopsRouteImport } from './routes/_authenticated/admin.loops'
 import { Route as AuthenticatedAdminLogRouteImport } from './routes/_authenticated/admin.log'
 import { Route as AuthenticatedAdminGlossaryRouteImport } from './routes/_authenticated/admin.glossary'
@@ -263,6 +264,12 @@ const AuthenticatedMessagesThreadIdRoute =
     path: '/$threadId',
     getParentRoute: () => AuthenticatedMessagesRoute,
   } as any)
+const AuthenticatedAdminSubscriptionsRoute =
+  AuthenticatedAdminSubscriptionsRouteImport.update({
+    id: '/admin/subscriptions',
+    path: '/admin/subscriptions',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAdminLoopsRoute = AuthenticatedAdminLoopsRouteImport.update({
   id: '/admin/loops',
   path: '/admin/loops',
@@ -340,6 +347,7 @@ export interface FileRoutesByFullPath {
   '/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
   '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
+  '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
   '/post/$postId': typeof AuthenticatedPostPostIdRoute
   '/forum/thread/$id': typeof ForumThreadIdRoute
@@ -388,6 +396,7 @@ export interface FileRoutesByTo {
   '/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
   '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
+  '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
   '/post/$postId': typeof AuthenticatedPostPostIdRoute
   '/forum/thread/$id': typeof ForumThreadIdRoute
@@ -438,6 +447,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
   '/_authenticated/admin/log': typeof AuthenticatedAdminLogRoute
   '/_authenticated/admin/loops': typeof AuthenticatedAdminLoopsRoute
+  '/_authenticated/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/_authenticated/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
   '/_authenticated/post/$postId': typeof AuthenticatedPostPostIdRoute
   '/forum/thread/$id': typeof ForumThreadIdRoute
@@ -488,6 +498,7 @@ export interface FileRouteTypes {
     | '/admin/glossary'
     | '/admin/log'
     | '/admin/loops'
+    | '/admin/subscriptions'
     | '/messages/$threadId'
     | '/post/$postId'
     | '/forum/thread/$id'
@@ -536,6 +547,7 @@ export interface FileRouteTypes {
     | '/admin/glossary'
     | '/admin/log'
     | '/admin/loops'
+    | '/admin/subscriptions'
     | '/messages/$threadId'
     | '/post/$postId'
     | '/forum/thread/$id'
@@ -585,6 +597,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/glossary'
     | '/_authenticated/admin/log'
     | '/_authenticated/admin/loops'
+    | '/_authenticated/admin/subscriptions'
     | '/_authenticated/messages/$threadId'
     | '/_authenticated/post/$postId'
     | '/forum/thread/$id'
@@ -914,6 +927,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMessagesThreadIdRouteImport
       parentRoute: typeof AuthenticatedMessagesRoute
     }
+    '/_authenticated/admin/subscriptions': {
+      id: '/_authenticated/admin/subscriptions'
+      path: '/admin/subscriptions'
+      fullPath: '/admin/subscriptions'
+      preLoaderRoute: typeof AuthenticatedAdminSubscriptionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/loops': {
       id: '/_authenticated/admin/loops'
       path: '/admin/loops'
@@ -984,6 +1004,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminGlossaryRoute: typeof AuthenticatedAdminGlossaryRoute
   AuthenticatedAdminLogRoute: typeof AuthenticatedAdminLogRoute
   AuthenticatedAdminLoopsRoute: typeof AuthenticatedAdminLoopsRoute
+  AuthenticatedAdminSubscriptionsRoute: typeof AuthenticatedAdminSubscriptionsRoute
   AuthenticatedPostPostIdRoute: typeof AuthenticatedPostPostIdRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
@@ -1000,6 +1021,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminGlossaryRoute: AuthenticatedAdminGlossaryRoute,
   AuthenticatedAdminLogRoute: AuthenticatedAdminLogRoute,
   AuthenticatedAdminLoopsRoute: AuthenticatedAdminLoopsRoute,
+  AuthenticatedAdminSubscriptionsRoute: AuthenticatedAdminSubscriptionsRoute,
   AuthenticatedPostPostIdRoute: AuthenticatedPostPostIdRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
 }
