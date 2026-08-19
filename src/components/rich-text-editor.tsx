@@ -130,6 +130,26 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // TEMPORARY: the focusin trace above only shows one collapsed minified
+  // frame — intercept the actual .focus() call site instead. If some JS
+  // is calling button.focus(), this logs its real (still-minified, but
+  // multi-frame) stack; if focus moves to the button WITHOUT ever going
+  // through this, it's native browser behavior, not application code.
+  useEffect(() => {
+    const proto = HTMLElement.prototype;
+    const orig = proto.focus;
+    proto.focus = function (this: HTMLElement, ...args: unknown[]) {
+      if (this.tagName === "BUTTON") {
+        dbg("HTMLElement.prototype.focus() called on BUTTON", describeEl(this));
+        // eslint-disable-next-line no-console
+        console.trace("[RTE-DEBUG] .focus() call stack");
+      }
+      return (orig as (...a: unknown[]) => void).apply(this, args);
+    };
+    return () => { proto.focus = orig; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // The contentEditable div only exists in the DOM while !sourceMode (see
   // the render below) — so at the moment toggleSource() flips sourceMode
   // back to false, ref.current is still null (the div hasn't remounted
