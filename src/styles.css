@@ -1206,13 +1206,21 @@
   color: oklch(0.98 0.01 240);
 }
 
-/* Rich lesson editor — visible typography inside contentEditable */
-.rich-editor h1 { font-size: 2rem; font-weight: 800; line-height: 1.15; margin: 0.6em 0 0.3em; color: hsl(var(--foreground, 210 20% 96%)); }
-.rich-editor h2 { font-size: 1.55rem; font-weight: 700; line-height: 1.2; margin: 0.55em 0 0.3em; }
-.rich-editor h3 { font-size: 1.25rem; font-weight: 700; line-height: 1.25; margin: 0.5em 0 0.25em; }
-.rich-editor p { margin: 0.35em 0; }
-.rich-editor a { color: #6ee7b7; text-decoration: underline; text-underline-offset: 2px; }
-.rich-editor blockquote {
+/* Rich lesson editor — visible typography inside contentEditable.
+ * .prose-custom shares every content rule below: it's the read-only
+ * counterpart used to render the exact same admin-authored HTML (glossary
+ * term descriptions, etc.) on public-facing pages via dangerouslySetInnerHTML
+ * — without it, paragraphs/lists/headings that AI-editor look identical
+ * while editing had zero spacing/typography once actually published, so
+ * everything ran together into one unreadable block. Only the two
+ * editor-chrome rules at the end (empty-state placeholder, drag-over
+ * highlight) stay .rich-editor-only — read-only content never needs either. */
+.rich-editor h1, .prose-custom h1 { font-size: 2rem; font-weight: 800; line-height: 1.15; margin: 0.6em 0 0.3em; color: hsl(var(--foreground, 210 20% 96%)); }
+.rich-editor h2, .prose-custom h2 { font-size: 1.55rem; font-weight: 700; line-height: 1.2; margin: 0.55em 0 0.3em; }
+.rich-editor h3, .prose-custom h3 { font-size: 1.25rem; font-weight: 700; line-height: 1.25; margin: 0.5em 0 0.25em; }
+.rich-editor p, .prose-custom p { margin: 0.35em 0; }
+.rich-editor a, .prose-custom a { color: #6ee7b7; text-decoration: underline; text-underline-offset: 2px; }
+.rich-editor blockquote, .prose-custom blockquote {
   border-left: 3px solid rgba(52, 211, 153, 0.5);
   padding: 0.35em 0.9em;
   margin: 0.6em 0;
@@ -1221,7 +1229,7 @@
   border-radius: 0 6px 6px 0;
   font-style: italic;
 }
-.rich-editor pre {
+.rich-editor pre, .prose-custom pre {
   background: rgba(0, 0, 0, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -1233,7 +1241,7 @@
   overflow-x: auto;
   white-space: pre-wrap;
 }
-.rich-editor code {
+.rich-editor code, .prose-custom code {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
@@ -1242,18 +1250,18 @@
   font-size: 0.88em;
   color: #a7f3d0;
 }
-.rich-editor pre code { background: transparent; border: 0; padding: 0; color: inherit; }
-.rich-editor ul { list-style: disc; padding-left: 1.5em; margin: 0.4em 0; }
-.rich-editor ol { list-style: decimal; padding-left: 1.7em; margin: 0.4em 0; }
-.rich-editor li { margin: 0.15em 0; }
-.rich-editor img { max-width: 100%; border-radius: 10px; margin: 0.5em 0; cursor: pointer; }
+.rich-editor pre code, .prose-custom pre code { background: transparent; border: 0; padding: 0; color: inherit; }
+.rich-editor ul, .prose-custom ul { list-style: disc; padding-left: 1.5em; margin: 0.4em 0; }
+.rich-editor ol, .prose-custom ol { list-style: decimal; padding-left: 1.7em; margin: 0.4em 0; }
+.rich-editor li, .prose-custom li { margin: 0.15em 0; }
+.rich-editor img, .prose-custom img { max-width: 100%; border-radius: 10px; margin: 0.5em 0; cursor: pointer; }
 .rich-editor img[data-selected] { outline: 2px solid rgba(52, 211, 153, 0.9); outline-offset: 2px; }
 
-.rich-editor video { max-width: 100%; border-radius: 10px; margin: 0.5em 0; display: block; }
-.rich-editor hr { border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1em 0; }
-.rich-editor table { border-collapse: collapse; width: 100%; margin: 0.6em 0; }
-.rich-editor table th, .rich-editor table td { border: 1px solid rgba(255,255,255,0.12); padding: 6px 8px; text-align: left; }
-.rich-editor table th { background: rgba(255,255,255,0.05); font-weight: 600; }
+.rich-editor video, .prose-custom video { max-width: 100%; border-radius: 10px; margin: 0.5em 0; display: block; }
+.rich-editor hr, .prose-custom hr { border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1em 0; }
+.rich-editor table, .prose-custom table { border-collapse: collapse; width: 100%; margin: 0.6em 0; }
+.rich-editor table th, .rich-editor table td, .prose-custom table th, .prose-custom table td { border: 1px solid rgba(255,255,255,0.12); padding: 6px 8px; text-align: left; }
+.rich-editor table th, .prose-custom table th { background: rgba(255,255,255,0.05); font-weight: 600; }
 .rich-editor:empty::before {
   content: attr(data-placeholder);
   color: rgba(148, 163, 184, 0.5);
