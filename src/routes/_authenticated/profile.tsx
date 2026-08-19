@@ -12,6 +12,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { type PlayerTrack } from "@/components/track-player";
 import { TrackCard } from "@/components/track-card";
 import { AvatarEditor } from "@/components/avatar-editor";
+import { ImageEditor } from "@/components/image-editor";
 import { analyzeAudioFile, fileExt, isLossless, isLossy, type TrackAnalysis } from "@/lib/audio-analysis";
 import { leagueForXp, nextLeague, progressInLeague } from "@/lib/leagues";
 import { uploadWithProgress, removeStorageObjects, formatBytes } from "@/lib/upload-progress";
@@ -19,6 +20,7 @@ import { resolveStorageUrl } from "@/lib/storage-url";
 import { SocialLinksEditor, parseSocials } from "@/components/social-links";
 import { useSubscription } from "@/hooks/use-subscription";
 import { ROLE_RULES, EXTRA_PERMISSION_LABEL, type StaffRole } from "@/lib/role-rules";
+import { ACCENT_COLORS, DISPLAY_FONTS, accentHex, fontFamily } from "@/lib/profile-customization";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -79,7 +81,7 @@ type WallPost = PostRow & {
   commentCount: number;
 };
 
-async function signUrl(bucket: "avatars" | "wall", path: string): Promise<string | null> {
+async function signUrl(bucket: "avatars" | "banners" | "wall", path: string): Promise<string | null> {
   return resolveStorageUrl(bucket, path, bucket);
 }
 
@@ -98,6 +100,9 @@ function ProfilePage() {
   const sub = useSubscription();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [avatarSigned, setAvatarSigned] = useState<string | null>(null);
+  const [bannerSigned, setBannerSigned] = useState<string | null>(null);
+  const [pendingBanner, setPendingBanner] = useState<File | null>(null);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
   const [scores, setScores] = useState<GameScore[]>([]);
   const [lessonsDone, setLessonsDone] = useState(0);
   const [presetsCount, setPresetsCount] = useState(0);
@@ -130,6 +135,7 @@ function ProfilePage() {
   const [wallSort, setWallSort] = useState<"new" | "old" | "plays" | "likes">("new");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const trackInputRef = useRef<HTMLInputElement>(null);
 
@@ -200,6 +206,8 @@ function ProfilePage() {
         setForm({ username: p.data.username ?? "", full_name: p.data.full_name ?? "", bio: p.data.bio ?? "" });
         const signed = p.data.avatar_url ? await signUrl("avatars", p.data.avatar_url) : null;
         setAvatarSigned(signed);
+        const bannerSigned = p.data.banner_url ? await signUrl("banners", p.data.banner_url) : null;
+        setBannerSigned(bannerSigned);
       }
       if (s.data) setScores(s.data);
       setLessonsDone(lp.count ?? 0);
@@ -288,6 +296,51 @@ function ProfilePage() {
     setPendingAvatar(null);
   }
 
+  function onBannerPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 12 * 1024 * 1024) { alert("Файл больше 12 МБ"); return; }
+    setPendingBanner(file);
+    if (bannerInputRef.current) bannerInputRef.current.value = "";
+  }
+
+  async function uploadBannerBlob(blob: Blob) {
+    if (!profile) return;
+    setUploadingBanner(true);
+    const key = `banner-${Date.now()}`;
+    setUploads((u) => ({ ...u, [key]: { name: "Баннер", loaded: 0, total: blob.size } }));
+    const { error, path } = await uploadWithProgress("banners", "banner.jpg", blob, {
+      contentType: "image/jpeg",
+      onProgress: (p) => setUploads((u) => ({ ...u, [key]: { name: "Баннер", loaded: p.loaded, total: p.total } })),
+    });
+    setUploads((u) => { const { [key]: _, ...rest } = u; return rest; });
+    if (!error && path) {
+      const oldPath = profile.banner_url;
+      await supabase.from("profiles").update({ banner_url: path }).eq("id", user.id);
+      if (oldPath) removeStorageObjects([oldPath]);
+      const signed = await signUrl("banners", path);
+      setBannerSigned(signed);
+      setProfile({ ...profile, banner_url: path });
+    } else {
+      alert("Не удалось загрузить: " + (error?.message ?? "неизвестная ошибка"));
+    }
+    setUploadingBanner(false);
+    setPendingBanner(null);
+  }
+
+  async function setAccentColor(id: string) {
+    if (!profile) return;
+    setProfile({ ...profile, accent_color: id });
+    const { error } = await supabase.from("profiles").update({ accent_color: id }).eq("id", user.id);
+    if (error) alert("Ошибка: " + error.message);
+  }
+
+  async function setDisplayFont(id: string) {
+    if (!profile) return;
+    setProfile({ ...profile, display_font: id });
+    const { error } = await supabase.from("profiles").update({ display_font: id }).eq("id", user.id);
+    if (error) alert("Ошибка: " + error.message);
+  }
 
 
   async function addTrackFiles(files: FileList | null) {
@@ -419,17 +472,43 @@ function ProfilePage() {
   // Every role the person actually holds, in the same fixed order as the
   // team page — a person can hold more than one (e.g. moderator + teacher).
   const staffRoles = (["super_admin", "admin", "moderator", "teacher"] as const).filter((r) => roles.includes(r));
+  const accent = accentHex(profile?.accent_color);
+  const nameFont = fontFamily(profile?.display_font);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
       <UploadProgressPanel uploads={uploads} />
       {/* Header card */}
-      <div className="glass rounded-2xl p-6 md:p-8">
-        <div className="flex flex-wrap items-start gap-6">
+      <div className="glass overflow-hidden rounded-2xl">
+        {/* Banner — the "this is my page" signal before anything else loads. */}
+        <div className="group relative h-32 w-full bg-secondary sm:h-44" style={{ background: bannerSigned ? undefined : `linear-gradient(135deg, ${accent}33, transparent)` }}>
+          {bannerSigned && <img src={bannerSigned} alt="" className="h-full w-full object-cover" />}
+          <button
+            type="button"
+            onClick={() => bannerInputRef.current?.click()}
+            disabled={uploadingBanner}
+            className="absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-black/50 px-2.5 py-1.5 text-xs font-semibold text-white opacity-0 backdrop-blur transition-opacity hover:bg-black/70 disabled:opacity-50 group-hover:opacity-100 sm:opacity-100"
+          >
+            <ImagePlus className="h-3.5 w-3.5" /> {bannerSigned ? "Сменить баннер" : "Добавить баннер"}
+          </button>
+          <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={onBannerPick} />
+          {pendingBanner && (
+            <ImageEditor
+              file={pendingBanner}
+              defaultAspect="16:9"
+              maxOutput={1600}
+              onCancel={() => setPendingBanner(null)}
+              onConfirm={uploadBannerBlob}
+            />
+          )}
+        </div>
+
+        <div className="p-6 md:p-8">
+        <div className="-mt-16 flex flex-wrap items-start gap-6 sm:-mt-12">
           <div className="relative">
             <div
-              className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-secondary text-4xl font-bold text-mint"
-              style={{ boxShadow: "var(--shadow-glow-mint)" }}
+              className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-background bg-secondary text-4xl font-bold text-mint"
+              style={{ boxShadow: `0 0 20px -4px ${accent}8c` }}
             >
               {avatarSigned ? <img src={avatarSigned} alt="" className="h-full w-full object-cover" /> : (profile?.username ?? "U")[0].toUpperCase()}
             </div>
@@ -449,7 +528,7 @@ function ProfilePage() {
             )}
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 pt-12 sm:pt-8">
             {editing ? (
               <div className="space-y-2">
                 <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="Никнейм" maxLength={30}
@@ -458,6 +537,46 @@ function ProfilePage() {
                   className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring" />
                 <textarea value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} placeholder="О себе (стиль, DAW, инструменты...)" maxLength={500} rows={3}
                   className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+
+                <div>
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Акцентный цвет</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ACCENT_COLORS.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        title={c.label}
+                        onClick={() => setAccentColor(c.id)}
+                        className="grid h-7 w-7 place-items-center rounded-full border-2 transition"
+                        style={{ background: c.hex, borderColor: profile?.accent_color === c.id ? c.hex : "transparent", boxShadow: profile?.accent_color === c.id ? `0 0 0 2px var(--background), 0 0 0 3px ${c.hex}` : undefined }}
+                      >
+                        {profile?.accent_color === c.id && <Check className="h-3.5 w-3.5 text-black/70" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Шрифт имени</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DISPLAY_FONTS.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setDisplayFont(f.id)}
+                        style={{ fontFamily: f.family }}
+                        className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+                          (profile?.display_font ?? DISPLAY_FONTS[0].id) === f.id
+                            ? "border-mint/50 bg-mint/10 text-mint"
+                            : "border-border text-foreground/80 hover:bg-secondary"
+                        }`}
+                      >
+                        Aa {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
                   <button onClick={saveProfile} disabled={saving} className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
                     <Check className="h-4 w-4" /> Сохранить
@@ -470,7 +589,7 @@ function ProfilePage() {
             ) : (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="truncate text-2xl font-bold">{profile?.username ?? "..."}</h1>
+                  <h1 className="truncate text-2xl font-bold" style={{ fontFamily: nameFont }}>{profile?.username ?? "..."}</h1>
                   {profile?.verified && (
                     <span title="Верифицированный аккаунт" className="inline-flex items-center gap-1 rounded-md border border-cyan-400/50 bg-cyan-400/10 px-1.5 py-0.5 text-xs font-semibold text-cyan-300">
                       <BadgeCheck className="h-3.5 w-3.5" />
@@ -531,6 +650,7 @@ function ProfilePage() {
               </>
             )}
           </div>
+        </div>
         </div>
       </div>
 

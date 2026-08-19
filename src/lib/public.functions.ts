@@ -32,7 +32,7 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
     // This silently 404'd every public profile page before this fix.
     const { data, error } = await s
       .from("profiles")
-      .select("id, username, avatar_url, xp, level, verified, created_at, bio, full_name, socials")
+      .select("id, username, avatar_url, banner_url, accent_color, display_font, xp, level, verified, created_at, bio, full_name, socials")
       .ilike("username", input.username)
       .maybeSingle();
     if (error) return { profile: null, error: error.message, followerCount: 0, followingCount: 0 };

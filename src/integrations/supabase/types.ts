@@ -866,9 +866,12 @@ export type Database = {
       }
       profiles: {
         Row: {
+          accent_color: string | null
           avatar_url: string | null
+          banner_url: string | null
           bio: string | null
           created_at: string
+          display_font: string | null
           full_name: string | null
           id: string
           level: number
@@ -881,9 +884,12 @@ export type Database = {
           xp: number
         }
         Insert: {
+          accent_color?: string | null
           avatar_url?: string | null
+          banner_url?: string | null
           bio?: string | null
           created_at?: string
+          display_font?: string | null
           full_name?: string | null
           id: string
           level?: number
@@ -896,9 +902,12 @@ export type Database = {
           xp?: number
         }
         Update: {
+          accent_color?: string | null
           avatar_url?: string | null
+          banner_url?: string | null
           bio?: string | null
           created_at?: string
+          display_font?: string | null
           full_name?: string | null
           id?: string
           level?: number

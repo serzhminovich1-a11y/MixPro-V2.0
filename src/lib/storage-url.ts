@@ -12,6 +12,7 @@ export function publicStorageUrl(path: string): string {
 /** Storage "folders" — plain key prefixes within the one shared bucket. */
 export const STORAGE_PREFIX = {
   avatars: "avatars",
+  banners: "banners",
   wall: "wall",
   presets: "presets",
   lessonAssets: "lesson-assets",

@@ -9,6 +9,8 @@ import { leagueForXp } from "@/lib/leagues";
 import { SocialLinksView, parseSocials } from "@/components/social-links";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { BannerImage } from "@/components/banner-image";
+import { accentHex, fontFamily } from "@/lib/profile-customization";
 
 const profileQuery = (username: string) =>
   queryOptions({
@@ -94,16 +96,25 @@ function PublicProfilePage() {
     if (!error && threadId) navigate({ to: "/messages/$threadId", params: { threadId } });
   }
 
+  const accent = accentHex(p.accent_color);
+  const nameFont = fontFamily(p.display_font);
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-14">
-      <div className="panel rounded-2xl p-6 md:p-8">
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full bg-secondary text-lg font-bold text-mint">
+      <div className="panel overflow-hidden rounded-2xl">
+        {/* Banner — same personalization a visitor should actually see, not
+            just the profile owner. Read-only here, no upload control. */}
+        <div className="relative h-28 w-full bg-secondary sm:h-36" style={{ background: p.banner_url ? undefined : `linear-gradient(135deg, ${accent}33, transparent)` }}>
+          <BannerImage path={p.banner_url} className="h-full w-full object-cover" />
+        </div>
+        <div className="p-6 md:p-8">
+        <div className="-mt-10 flex flex-wrap items-start gap-4 sm:-mt-8">
+          <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full border-4 border-card bg-secondary text-lg font-bold text-mint">
             <AvatarImage path={p.avatar_url} fallback={p.username.slice(0, 2).toUpperCase()} className={p.avatar_url ? "h-full w-full object-cover" : ""} />
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 pt-8 sm:pt-6">
             <div className="flex items-center gap-2">
-              <h1 className="truncate text-2xl font-bold">@{p.username}</h1>
+              <h1 className="truncate text-2xl font-bold" style={{ fontFamily: nameFont }}>@{p.username}</h1>
               {p.verified && <BadgeCheck className="h-5 w-5 text-cyan" />}
             </div>
             {p.full_name && <p className="mt-0.5 truncate text-sm font-medium text-foreground/90">{p.full_name}</p>}
@@ -170,6 +181,7 @@ function PublicProfilePage() {
         <div className="mt-6 flex gap-2">
           <Link to="/leaderboard" className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary">Рейтинг</Link>
           <Link to="/community" className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-secondary">Сообщество</Link>
+        </div>
         </div>
       </div>
     </div>
