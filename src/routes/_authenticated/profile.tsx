@@ -495,12 +495,18 @@ function ProfilePage() {
   return (
     <>
       <UploadProgressPanel uploads={uploads} />
-      {/* Full-bleed hero — spans the whole viewport width instead of living
-          inside a small boxed card, so the header actually reads as a
-          showcase page (Steam-style) instead of a form floating in a sea
-          of empty background. Breaks out of the page's centered container
-          with the standard "100vw bleed" trick. */}
-      <div className="relative left-1/2 right-1/2 -mx-[50vw] w-screen">
+      {/* Full-width hero — spans the whole visible content area instead of
+          living inside a small boxed card, so the header actually reads
+          as a showcase page (Steam-style) instead of a form floating in a
+          sea of empty background. Deliberately NOT the usual "100vw
+          bleed" trick (w-screen + -mx-[50vw] + left-1/2) — that assumes
+          its container is centered in the viewport, which breaks (shifts
+          everything left, dead space on the right) the moment the admin
+          sidebar is present, since <main> then sits flush against the
+          sidebar instead of centered. <main> already has no max-width of
+          its own, so a plain full-width block already fills exactly the
+          visible content area on every page, sidebar or not. */}
+      <div className="relative w-full">
         {/* Banner — a genuinely large, dimmed hero image when there's an
             actual photo to show. Without one, it's still full-width and
             sized with real presence (not a token strip), just carrying a

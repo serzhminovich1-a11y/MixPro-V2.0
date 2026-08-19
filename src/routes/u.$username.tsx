@@ -104,9 +104,12 @@ function PublicProfilePage() {
 
   return (
     <>
-      {/* Full-bleed hero — spans the whole viewport width instead of a small
-          boxed card, same treatment as the owner's own view, read-only here. */}
-      <div className="relative left-1/2 right-1/2 -mx-[50vw] w-screen">
+      {/* Full-width hero — spans the whole visible content area instead of a
+          small boxed card, same treatment as the owner's own view, read-only
+          here. See profile.tsx for why this is a plain w-full and not the
+          usual "100vw bleed" trick (breaks when the admin sidebar is
+          present). */}
+      <div className="relative w-full">
         <div className={`relative w-full overflow-hidden bg-secondary ${p.banner_url ? "h-72 sm:h-[28rem]" : "h-40 sm:h-56"}`} style={{ background: p.banner_url ? undefined : `radial-gradient(120% 140% at 20% 0%, ${accent}33, transparent 60%), var(--background)` }}>
           {!p.banner_url && (
             <div className="absolute inset-0 opacity-40" style={{ backgroundImage: `radial-gradient(circle at 1px 1px, ${accent}22 1px, transparent 0)`, backgroundSize: "18px 18px" }} />
@@ -139,8 +142,12 @@ function PublicProfilePage() {
                 <span className="grid h-4 w-4 place-items-center rounded-full bg-violet/25 font-mono text-[9px]">{p.level ?? 1}</span>
                 Уровень
               </span>
+              {/* league.color is a Tailwind text-color *class* (see
+                  leagues.ts), not a CSS color value — belongs in
+                  className, not a style prop (found while fixing the
+                  sidebar full-bleed bug; pre-existing, not new here). */}
               {league && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-secondary/60 px-1.5 py-0.5"><Trophy className="h-3 w-3" style={{ color: league.color }} />{league.name}</span>
+                <span className="inline-flex items-center gap-1 rounded-md bg-secondary/60 px-1.5 py-0.5"><Trophy className={`h-3 w-3 ${league.color}`} />{league.name}</span>
               )}
               <span className="inline-flex items-center gap-1 rounded-md bg-secondary/60 px-1.5 py-0.5"><Clock className="h-3 w-3" />{tenureLabel(p.created_at)}</span>
             </div>
