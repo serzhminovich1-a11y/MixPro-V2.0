@@ -1125,6 +1125,10 @@ export type Database = {
         Args: { _actor: string; _days: number; _target: string; _tier?: string }
         Returns: string
       }
+      admin_list_user_emails: {
+        Args: { _actor: string }
+        Returns: { id: string; email: string | null }[]
+      }
       admin_set_subscription: {
         Args: { _actor: string; _target: string; _tier: string; _until: string }
         Returns: undefined

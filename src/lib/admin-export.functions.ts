@@ -18,10 +18,11 @@ export const exportUsersXlsx = createServerFn({ method: "POST" })
     const myRank = (myRoles ?? []).reduce((m, r) => Math.max(m, ranks[r.role] ?? 0), 0);
     if (myRank < 2) throw new Error("Только для админов");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const XLSX = await import("xlsx");
 
-    // Fetch all datasets in parallel. Wrap each to tolerate missing tables.
+    // Fetch all datasets in parallel. Wrap each to tolerate missing tables
+    // or an admin-rank RLS policy that doesn't cover a given table — one
+    // missing sheet shouldn't sink the whole export.
     const safe = async <T,>(p: PromiseLike<{ data: T[] | null }>): Promise<T[]> => {
       try {
         const { data } = await p;
@@ -36,36 +37,32 @@ export const exportUsersXlsx = createServerFn({ method: "POST" })
       courseProgress, lessonProgress, posts, presets,
       gameScores, threads, replies,
     ] = await Promise.all([
-      safe(supabaseAdmin.from("profiles").select("*").order("created_at", { ascending: true })),
-      safe(supabaseAdmin.from("user_roles").select("*")),
-      safe(supabaseAdmin.from("user_bans").select("*")),
-      safe(supabaseAdmin.from("certifications").select("*")),
-      safe(supabaseAdmin.from("user_certifications").select("*")),
-      safe(supabaseAdmin.from("user_course_progress").select("*")),
-      safe(supabaseAdmin.from("lesson_progress").select("*")),
-      safe(supabaseAdmin.from("posts").select("*")),
-      safe(supabaseAdmin.from("presets").select("*")),
-      safe(supabaseAdmin.from("game_scores").select("*")),
-      safe(supabaseAdmin.from("forum_threads").select("*")),
-      safe(supabaseAdmin.from("forum_replies").select("*")),
+      safe(context.supabase.from("profiles").select("*").order("created_at", { ascending: true })),
+      safe(context.supabase.from("user_roles").select("*")),
+      safe(context.supabase.from("user_bans").select("*")),
+      safe(context.supabase.from("certifications").select("*")),
+      safe(context.supabase.from("user_certifications").select("*")),
+      safe(context.supabase.from("user_course_progress").select("*")),
+      safe(context.supabase.from("lesson_progress").select("*")),
+      safe(context.supabase.from("posts").select("*")),
+      safe(context.supabase.from("presets").select("*")),
+      safe(context.supabase.from("game_scores").select("*")),
+      safe(context.supabase.from("forum_threads").select("*")),
+      safe(context.supabase.from("forum_replies").select("*")),
     ]);
 
-    // Auth emails via admin API (batched pages).
+    // Emails via a SECURITY DEFINER RPC (admin_list_user_emails) instead of
+    // the GoTrue Admin API — auth.users itself is off-limits to a plain
+    // authenticated client, but that RPC reads it on our behalf and does
+    // its own admin-rank check server-side.
     const emailByUser = new Map<string, string>();
     try {
-      let page = 1;
-      // Fetch up to 5000 users (50 per page × 100 pages max, cap at 100 pages)
-      for (let i = 0; i < 100; i++) {
-        const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
-        if (error || !data?.users?.length) break;
-        for (const u of data.users) {
-          if (u.email) emailByUser.set(u.id, u.email);
-        }
-        if (data.users.length < 200) break;
-        page++;
+      const { data } = await context.supabase.rpc("admin_list_user_emails", { _actor: context.userId });
+      for (const row of (data ?? []) as { id: string; email: string | null }[]) {
+        if (row.email) emailByUser.set(row.id, row.email);
       }
     } catch {
-      // ignore
+      // ignore — sheet just comes back without emails
     }
 
     // Build role/cert lookups
