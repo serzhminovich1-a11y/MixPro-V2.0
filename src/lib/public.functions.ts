@@ -35,9 +35,9 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
       .select("id, username, avatar_url, banner_url, accent_color, display_font, xp, level, verified, created_at, bio, full_name, socials")
       .ilike("username", input.username)
       .maybeSingle();
-    if (error) return { profile: null, error: error.message, followerCount: 0, followingCount: 0, certs: [] as Cert[] };
-    if (!data) return { profile: null, error: null, followerCount: 0, followingCount: 0, certs: [] as Cert[] };
-    const [followers, following, userCertsRes, allCertsRes] = await Promise.all([
+    if (error) return { profile: null, error: error.message, followerCount: 0, followingCount: 0, certs: [] as Cert[], presets: [] as PublicPreset[] };
+    if (!data) return { profile: null, error: null, followerCount: 0, followingCount: 0, certs: [] as Cert[], presets: [] as PublicPreset[] };
+    const [followers, following, userCertsRes, allCertsRes, presetsRes] = await Promise.all([
       s.from("user_follows").select("follower_id", { count: "exact", head: true }).eq("followed_id", data.id),
       s.from("user_follows").select("followed_id", { count: "exact", head: true }).eq("follower_id", data.id),
       // Badges — earned certifications. Both tables are publicly readable
@@ -45,6 +45,7 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
       // for any visitor, not just the profile owner.
       s.from("user_certifications").select("certification_id, awarded_at").eq("user_id", data.id),
       s.from("certifications").select("id, slug, name, color, icon"),
+      s.from("presets").select("id, title, daw, genre, downloads, is_premium").eq("author_id", data.id).order("created_at", { ascending: false }).limit(6),
     ]);
     const certMap = new Map((allCertsRes.data ?? []).map((c) => [c.id, c]));
     const certs = (userCertsRes.data ?? [])
@@ -53,10 +54,11 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
         return c ? { ...c, awarded_at: uc.awarded_at } : null;
       })
       .filter((c): c is NonNullable<typeof c> => !!c);
-    return { profile: data, error: null, followerCount: followers.count ?? 0, followingCount: following.count ?? 0, certs };
+    return { profile: data, error: null, followerCount: followers.count ?? 0, followingCount: following.count ?? 0, certs, presets: presetsRes.data ?? [] };
   });
 
 type Cert = { id: string; slug: string; name: string; color: string; icon: string | null; awarded_at?: string };
+type PublicPreset = { id: string; title: string; daw: string; genre: string | null; downloads: number; is_premium: boolean };
 
 export const searchUsernames = createServerFn({ method: "GET" })
   .validator((input: { q: string }) => input)

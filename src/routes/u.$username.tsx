@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { BannerImage } from "@/components/banner-image";
 import { accentHex, fontFamily, tenureLabel } from "@/lib/profile-customization";
 import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
+import { PremiumBadge } from "@/components/premium-paywall";
 
 const profileQuery = (username: string) =>
   queryOptions({
@@ -195,6 +196,27 @@ function PublicProfilePage() {
         {badges.length > 0 && (
           <div className="glass mt-5 rounded-2xl p-5">
             <CertBadgeRow badges={badges} />
+          </div>
+        )}
+
+        {data.presets.length > 0 && (
+          <div className="glass mt-5 rounded-2xl p-5">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Пресеты · {data.presets.length}</p>
+              <Link to="/presets" className="text-xs font-medium text-mint hover:underline">Каталог пресетов →</Link>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {data.presets.map((preset) => (
+                <div key={preset.id} className="rounded-xl border border-border/60 bg-secondary/30 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-cyan">{preset.daw}</span>
+                    {preset.is_premium && <PremiumBadge />}
+                  </div>
+                  <p className="mt-2 truncate text-sm font-semibold">{preset.title}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{preset.genre ?? "Без жанра"} · {preset.downloads} ⬇</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Trophy, Gamepad2, GraduationCap, SlidersHorizontal, Pencil, Check, X,
   Shield, ShieldCheck, Crown, ImagePlus, Send, Trash2,
@@ -22,6 +22,7 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { ROLE_RULES, EXTRA_PERMISSION_LABEL, type StaffRole } from "@/lib/role-rules";
 import { ACCENT_COLORS, DISPLAY_FONTS, accentHex, fontFamily, tenureLabel } from "@/lib/profile-customization";
 import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
+import { PremiumBadge } from "@/components/premium-paywall";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -107,6 +108,7 @@ function ProfilePage() {
   const [scores, setScores] = useState<GameScore[]>([]);
   const [lessonsDone, setLessonsDone] = useState(0);
   const [presetsCount, setPresetsCount] = useState(0);
+  const [myPresets, setMyPresets] = useState<Tables<"presets">[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
   const [staffPerms, setStaffPerms] = useState<{ can_manage_courses: boolean; can_view_finances: boolean } | null>(null);
   const [badges, setBadges] = useState<ProfileBadge[]>([]);
@@ -199,7 +201,7 @@ function ProfilePage() {
         supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
         supabase.from("game_scores").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
         supabase.from("lesson_progress").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-        supabase.from("presets").select("id", { count: "exact", head: true }).eq("author_id", user.id),
+        supabase.from("presets").select("*").eq("author_id", user.id).order("created_at", { ascending: false }),
         supabase.from("user_roles").select("role").eq("user_id", user.id),
         supabase.from("staff_permissions").select("can_manage_courses, can_view_finances").eq("user_id", user.id).maybeSingle(),
         // Badges — same two-query + client-side join pattern used everywhere
@@ -217,7 +219,7 @@ function ProfilePage() {
       }
       if (s.data) setScores(s.data);
       setLessonsDone(lp.count ?? 0);
-      setPresetsCount(pr.count ?? 0);
+      if (pr.data) { setMyPresets(pr.data); setPresetsCount(pr.data.length); }
       if (rl.data) setRoles(rl.data.map((r) => r.role as string));
       if (sp.data) setStaffPerms(sp.data);
       const certMap = new Map((ac.data ?? []).map((c) => [c.id, c]));
@@ -698,6 +700,27 @@ function ProfilePage() {
       {badges.length > 0 && (
         <div className="glass mt-4 rounded-2xl p-5 md:p-6">
           <CertBadgeRow badges={badges} />
+        </div>
+      )}
+
+      {myPresets.length > 0 && (
+        <div className="glass mt-4 rounded-2xl p-5 md:p-6">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Мои пресеты · {myPresets.length}</p>
+            <Link to="/presets" className="text-xs font-medium text-mint hover:underline">Каталог пресетов →</Link>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {myPresets.slice(0, 6).map((preset) => (
+              <div key={preset.id} className="rounded-xl border border-border/60 bg-secondary/30 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-cyan">{preset.daw}</span>
+                  {preset.is_premium && <PremiumBadge />}
+                </div>
+                <p className="mt-2 truncate text-sm font-semibold">{preset.title}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{preset.genre ?? "Без жанра"} · {preset.downloads} ⬇</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
