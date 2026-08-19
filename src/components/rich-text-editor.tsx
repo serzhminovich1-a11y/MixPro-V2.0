@@ -89,7 +89,8 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
   }
   function describeEl(el: Element | null) {
     if (!el) return null;
-    return `${el.tagName}${el.id ? "#" + el.id : ""}${(el as HTMLElement).className ? "." + String((el as HTMLElement).className).replace(/\s+/g, ".") : ""}`;
+    const title = el.getAttribute?.("title");
+    return `${el.tagName}${el.id ? "#" + el.id : ""}${title ? `[title="${title}"]` : ""}${(el as HTMLElement).className ? "." + String((el as HTMLElement).className).replace(/\s+/g, ".") : ""}`;
   }
   function describeSel() {
     const sel = window.getSelection();
@@ -108,6 +109,24 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
       ref.current.innerHTML = value;
     }
     setSourceValue(value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // TEMPORARY: whenever focus lands on ANY <button>, log which one (title
+  // identifies it exactly) plus a stack trace — if a stack shows up, some
+  // JS called .focus() and we can see exactly what; an empty/native-only
+  // stack means it's the browser itself doing this, not our code.
+  useEffect(() => {
+    function onFocusIn(e: FocusEvent) {
+      const t = e.target as HTMLElement;
+      if (t?.tagName === "BUTTON") {
+        dbg("GLOBAL focusin -> BUTTON", describeEl(t));
+        // eslint-disable-next-line no-console
+        console.trace("[RTE-DEBUG] stack at focus-steal");
+      }
+    }
+    document.addEventListener("focusin", onFocusIn, true);
+    return () => document.removeEventListener("focusin", onFocusIn, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
