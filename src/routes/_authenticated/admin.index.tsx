@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
@@ -13,6 +13,7 @@ import {
   setRole, adjustXp, banUser, unbanUser, awardCert,
   setSubscription, extendSubscription, setVerified,
 } from "@/lib/admin.functions";
+import { AvatarImage } from "@/components/avatar-image";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -308,55 +309,60 @@ function AdminPage() {
           const paid = u.subscription_tier !== "free" || subActive(u);
           return (
             <div key={u.id} className={`panel rounded-xl ${u.ban ? "border-destructive/40" : ""}`}>
-              <button
-                onClick={() => setExpanded(isOpen ? null : u.id)}
-                className="grid w-full grid-cols-[2.5rem_1fr_auto] items-center gap-3 p-2.5 text-left sm:grid-cols-[2.5rem_1fr_8rem_7rem_5.5rem_1.25rem]"
-              >
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-sm font-bold text-mint">
-                  {(u.username ?? "?")[0]?.toUpperCase()}
-                </span>
+              <div className="grid w-full grid-cols-[2.5rem_1fr_auto] items-center gap-3 p-2.5 sm:grid-cols-[2.5rem_1fr_8rem_7rem_5.5rem_1.25rem]">
+                {/* Avatar + name — its own link straight to the public
+                    profile, separate from the row's expand/collapse toggle. */}
+                <Link to="/u/$username" params={{ username: u.username ?? "" }} className="contents" title="Открыть профиль">
+                  <AvatarImage
+                    path={u.avatar_url}
+                    fallback={(u.username ?? "?")[0]?.toUpperCase() ?? "?"}
+                    className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-secondary text-sm font-bold text-mint"
+                  />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold hover:underline">{u.username ?? "—"}</span>
+                      {u.verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-cyan-300" />}
+                      {isSelf && <span className="rounded bg-mint/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mint">Ты</span>}
+                      {u.ban && <span className="rounded bg-destructive/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-destructive">Бан</span>}
+                      {u.certs.length > 0 && (
+                        <span title={u.certs.map((c) => c.name).join(", ")} className="rounded border border-border/60 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                          ★ {u.certs.length}
+                        </span>
+                      )}
+                    </div>
+                    {/* Role/tier/LVL repeated here, compact, for mobile where the
+                        dedicated columns are hidden. */}
+                    <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground sm:hidden">
+                      {role ? `${ROLE_LABEL[role]} · ` : ""}{paid ? `${TIER_LABEL[u.subscription_tier] ?? u.subscription_tier} · ` : ""}LVL {u.level} · {u.xp} XP
+                    </p>
+                  </div>
+                </Link>
 
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="truncate text-sm font-semibold">{u.username ?? "—"}</span>
-                    {u.verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-cyan-300" />}
-                    {isSelf && <span className="rounded bg-mint/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mint">Ты</span>}
-                    {u.ban && <span className="rounded bg-destructive/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-destructive">Бан</span>}
-                    {u.certs.length > 0 && (
-                      <span title={u.certs.map((c) => c.name).join(", ")} className="rounded border border-border/60 px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                        ★ {u.certs.length}
+                {/* Rest of the row toggles the manage panel below. */}
+                <button onClick={() => setExpanded(isOpen ? null : u.id)} className="contents" title="Управление">
+                  <span className="hidden sm:block">
+                    {role && (
+                      <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${ROLE_COLORS[role] ?? ROLE_COLORS.user}`}>
+                        {ROLE_LABEL[role]}
                       </span>
                     )}
-                  </div>
-                  {/* Role/tier/LVL repeated here, compact, for mobile where the
-                      dedicated columns are hidden. */}
-                  <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground sm:hidden">
-                    {role ? `${ROLE_LABEL[role]} · ` : ""}{paid ? `${TIER_LABEL[u.subscription_tier] ?? u.subscription_tier} · ` : ""}LVL {u.level} · {u.xp} XP
-                  </p>
-                </div>
+                  </span>
 
-                <span className="hidden sm:block">
-                  {role && (
-                    <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${ROLE_COLORS[role] ?? ROLE_COLORS.user}`}>
-                      {ROLE_LABEL[role]}
-                    </span>
-                  )}
-                </span>
+                  <span className="hidden sm:block">
+                    {paid && (
+                      <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${TIER_COLORS[u.subscription_tier] ?? TIER_COLORS.free}`}>
+                        {TIER_LABEL[u.subscription_tier] ?? u.subscription_tier}
+                      </span>
+                    )}
+                  </span>
 
-                <span className="hidden sm:block">
-                  {paid && (
-                    <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${TIER_COLORS[u.subscription_tier] ?? TIER_COLORS.free}`}>
-                      {TIER_LABEL[u.subscription_tier] ?? u.subscription_tier}
-                    </span>
-                  )}
-                </span>
+                  <span className="hidden text-right font-mono text-[11px] text-muted-foreground sm:block">
+                    {u.level} · {u.xp}
+                  </span>
 
-                <span className="hidden text-right font-mono text-[11px] text-muted-foreground sm:block">
-                  {u.level} · {u.xp}
-                </span>
-
-                <ChevronDown className={`h-4 w-4 shrink-0 justify-self-end transition-transform ${isOpen ? "rotate-180" : ""}`} />
-              </button>
+                  <ChevronDown className={`h-4 w-4 shrink-0 justify-self-end transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                </button>
+              </div>
 
               {isOpen && (
                 <div className="border-t border-black/60 p-4">

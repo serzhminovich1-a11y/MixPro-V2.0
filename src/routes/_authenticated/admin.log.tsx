@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ScrollText, Loader2 } from "lucide-react";
 import { listAdminActions, getStaffRoster } from "@/lib/admin.functions";
@@ -134,12 +134,24 @@ function AdminLogPage() {
           {rows.map((r) => (
             <div key={r.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-lg border border-border bg-card/30 px-3 py-2 text-sm">
               <span className="font-mono text-[10px] text-muted-foreground">{fmt(r.created_at)}</span>
-              <span className="font-semibold text-mint">{r.actor_username ?? r.actor_id.slice(0, 8)}</span>
+              {r.actor_username ? (
+                <Link to="/u/$username" params={{ username: r.actor_username }} className="font-semibold text-mint hover:underline">
+                  {r.actor_username}
+                </Link>
+              ) : (
+                <span className="font-semibold text-mint">{r.actor_id.slice(0, 8)}</span>
+              )}
               <span className="text-muted-foreground">{ACTION_LABEL[r.action] ?? r.action}</span>
               {r.target_id && (
                 <>
                   <span className="text-muted-foreground">→</span>
-                  <span className="font-semibold">{r.target_username ?? r.target_id.slice(0, 8)}</span>
+                  {r.target_username ? (
+                    <Link to="/u/$username" params={{ username: r.target_username }} className="font-semibold hover:underline">
+                      {r.target_username}
+                    </Link>
+                  ) : (
+                    <span className="font-semibold">{r.target_id.slice(0, 8)}</span>
+                  )}
                 </>
               )}
               {metaSummary(r.meta) && (

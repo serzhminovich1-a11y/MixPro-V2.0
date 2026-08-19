@@ -7,6 +7,7 @@ import { RoleGate } from "@/components/role-gate";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 import { toast } from "sonner";
 import { ROLE_ORDER, ROLE_LABEL, ROLE_DOT, ROLE_RULES, type StaffRole } from "@/lib/role-rules";
+import { AvatarImage } from "@/components/avatar-image";
 
 export const Route = createFileRoute("/_authenticated/admin/team")({
   head: () => ({ meta: [{ title: "Команда — MixPro" }, { name: "robots", content: "noindex" }] }),
@@ -128,13 +129,13 @@ function AdminTeamPage() {
             {staff.map((m) => (
               <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  {m.avatar_url ? (
-                    <img src={m.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold text-muted-foreground">
-                      {m.username?.[0]?.toUpperCase() ?? "?"}
-                    </div>
-                  )}
+                  <Link to="/u/$username" params={{ username: m.username ?? "" }} title="Открыть профиль">
+                    <AvatarImage
+                      path={m.avatar_url}
+                      fallback={m.username?.[0]?.toUpperCase() ?? "?"}
+                      className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-secondary text-xs font-bold text-muted-foreground"
+                    />
+                  </Link>
                   <div className="min-w-0">
                     <Link to="/u/$username" params={{ username: m.username ?? "" }} className="flex items-center gap-1 text-sm font-semibold hover:underline">
                       @{m.username}
