@@ -11,10 +11,8 @@ import { exportUsersXlsx } from "@/lib/admin-export.functions";
 import {
   claimSuperAdmin, getMyAdminContext, listUsers, listCertifications,
   setRole, adjustXp, banUser, unbanUser, awardCert,
-  setSubscription, extendSubscription, setVerified, selfBoost,
+  setSubscription, extendSubscription, setVerified,
 } from "@/lib/admin.functions";
-import { supabase } from "@/integrations/supabase/client";
-import { LEAGUES } from "@/lib/leagues";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -36,8 +34,6 @@ type UserRow = {
   subscription_tier: "free" | "trial" | "pro" | "lifetime" | string;
   subscription_until: string | null;
 };
-
-type MyProfile = { id: string; xp: number; level: number; verified: boolean };
 
 const TIER_LABEL: Record<string, string> = {
   free: "Free", trial: "Trial", pro: "PRO", lifetime: "Lifetime",
@@ -69,18 +65,22 @@ const ROLE_COLORS: Record<string, string> = {
   teacher: "bg-orange-500/20 text-orange-300 border-orange-500/40",
   user: "bg-secondary text-muted-foreground border-black/60",
 };
+const ROLE_RANK: Record<string, number> = { super_admin: 4, admin: 3, moderator: 2, teacher: 1 };
+/** Highest-ranked role only — a compact table row shows one badge, not
+ * one per role a person happens to hold. Full list is still in the
+ * expanded detail panel below (the checkbox grid). */
+function topRole(roles: string[]): string | null {
+  return roles.reduce<string | null>((top, r) => (!top || (ROLE_RANK[r] ?? 0) > (ROLE_RANK[top] ?? 0) ? r : top), null);
+}
 
 function AdminPage() {
-  const { user } = Route.useRouteContext();
   const [ctx, setCtx] = useState<{ userId: string; roles: string[]; isSuperAdmin: boolean; isAdmin: boolean } | null>(null);
-  const [me, setMe] = useState<MyProfile | null>(null);
-  const [selfBusy, setSelfBusy] = useState(false);
-  const [boostDelta, setBoostDelta] = useState(1000);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [certs, setCerts] = useState<Cert[]>([]);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"xp" | "created_at" | "username">("xp");
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [myRank, setMyRank] = useState(0);
@@ -109,9 +109,8 @@ function AdminPage() {
   const _extendSub = useServerFn(extendSubscription);
   const _setSub = useServerFn(setSubscription);
   const _setVerified = useServerFn(setVerified);
-  const _selfBoost = useServerFn(selfBoost);
 
-  async function reload(opts?: { offset?: number }) {
+  async function reload(opts?: { offset?: number; sort?: typeof sort }) {
     setLoading(true);
     try {
       const [c, cs] = await Promise.all([_ctx({}), _listCerts()]);
@@ -119,14 +118,10 @@ function AdminPage() {
       setCerts(cs.certifications as Cert[]);
       if (c.isAdmin) {
         const offset = opts?.offset ?? page * PAGE_SIZE;
-        const r = await _list({ data: { search, limit: PAGE_SIZE, offset } });
+        const r = await _list({ data: { search, limit: PAGE_SIZE, offset, sort: opts?.sort ?? sort } });
         setUsers(r.users as UserRow[]);
         setMyRank(r.myRank);
         setTotal(r.total);
-      }
-      if (c.isSuperAdmin) {
-        const { data } = await supabase.from("profiles").select("id, xp, level, verified").eq("id", user.id).maybeSingle();
-        if (data) setMe(data as MyProfile);
       }
     } catch (e) {
       toast.error((e as Error).message);
@@ -147,6 +142,12 @@ function AdminPage() {
     reload({ offset: 0 }).catch(() => {});
   }
 
+  function onSortChange(next: typeof sort) {
+    setSort(next);
+    setPage(0);
+    reload({ offset: 0, sort: next }).catch(() => {});
+  }
+
   async function doClaim() {
     try {
       await _claim({});
@@ -161,19 +162,6 @@ function AdminPage() {
       toast.success(ok);
       await reload();
     } catch (e) { toast.error((e as Error).message); }
-  }
-
-  async function doSelfBoost(patch: { deltaXp?: number; verified?: boolean; level?: number }) {
-    setSelfBusy(true);
-    try {
-      await _selfBoost({ data: patch });
-      const { data } = await supabase.from("profiles").select("id, xp, level, verified").eq("id", user.id).maybeSingle();
-      if (data) setMe(data as MyProfile);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setSelfBusy(false);
-    }
   }
 
   if (loading && users.length === 0 && !ctx) return <div className="p-8 text-sm text-muted-foreground">Загрузка...</div>;
@@ -244,98 +232,27 @@ function AdminPage() {
         </button>
       </div>
 
-      {ctx.isSuperAdmin && (
-        <div className="mt-6 rounded-xl border border-yellow-400/30 bg-yellow-400/5 p-4">
-          <div className="flex items-center gap-2">
-            <Crown className="h-4 w-4 text-yellow-300" />
-            <h3 className="text-sm font-semibold text-yellow-200">Self-boost (только для своего аккаунта)</h3>
-            <span className="ml-auto text-[10px] uppercase tracking-widest text-yellow-400/70">dev</span>
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-border bg-background/40 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-mint">XP · Lvl {me?.level ?? 1}</p>
-              <div className="mt-2 flex items-center gap-1.5">
-                <input
-                  type="number"
-                  value={boostDelta}
-                  onChange={(e) => setBoostDelta(Number(e.target.value) || 0)}
-                  className="w-full min-w-0 rounded border border-input bg-background px-2 py-1 text-sm font-mono outline-none focus:ring-1 focus:ring-ring"
-                />
-                <button
-                  disabled={selfBusy}
-                  onClick={() => doSelfBoost({ deltaXp: boostDelta })}
-                  className="inline-flex items-center gap-1 rounded-md bg-mint px-2 py-1 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50"
-                >
-                  <Zap className="h-3 w-3" />+
-                </button>
-                <button
-                  disabled={selfBusy}
-                  onClick={() => doSelfBoost({ deltaXp: -Math.abs(boostDelta) })}
-                  className="rounded-md border border-border px-2 py-1 text-xs"
-                >
-                  −
-                </button>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {[100, 500, 1000, 5000, 25000].map((v) => (
-                  <button
-                    key={v}
-                    disabled={selfBusy}
-                    onClick={() => doSelfBoost({ deltaXp: v })}
-                    className="rounded-full border border-border px-2 py-0.5 text-[10px] hover:bg-secondary"
-                  >
-                    +{v.toLocaleString()}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-lg border border-border bg-background/40 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-violet">Лига</p>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {LEAGUES.map((L) => (
-                  <button
-                    key={L.key}
-                    disabled={selfBusy}
-                    onClick={() => doSelfBoost({ deltaXp: L.min - (me?.xp ?? 0) })}
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${L.color} ${L.border}`}
-                  >
-                    <span>{L.icon}</span>
-                    {L.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-lg border border-border bg-background/40 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan">Верификация</p>
-              <button
-                disabled={selfBusy}
-                onClick={() => doSelfBoost({ verified: !me?.verified })}
-                className={`mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
-                  me?.verified
-                    ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-200"
-                    : "border-border hover:bg-secondary"
-                }`}
-              >
-                <BadgeCheck className="h-3.5 w-3.5" />
-                {me?.verified ? "Верифицирован" : "Выдать себе"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="glass mt-6 flex items-center gap-2 rounded-xl p-2">
-        <Search className="ml-2 h-4 w-4 text-muted-foreground" />
+      <div className="glass mt-6 flex flex-wrap items-center gap-2 rounded-xl p-2">
+        <Search className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && doSearch()}
           placeholder="Поиск по username..."
-          className="flex-1 bg-transparent px-2 py-1.5 text-sm outline-none"
+          className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm outline-none"
         />
         <button onClick={doSearch} className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
           Найти
         </button>
+        <select
+          value={sort}
+          onChange={(e) => onSortChange(e.target.value as typeof sort)}
+          className="rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+        >
+          <option value="xp">По XP</option>
+          <option value="created_at">По дате регистрации</option>
+          <option value="username">По имени</option>
+        </select>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -365,7 +282,18 @@ function AdminPage() {
         </span>
       </div>
 
-      <div className="mt-4 space-y-2">
+      {/* Column headers — a real table shape scans far faster once this list
+          is hundreds of rows long than the old stacked-badge cards did. */}
+      <div className="mt-4 hidden grid-cols-[2.5rem_1fr_8rem_7rem_5.5rem_1.25rem] gap-3 px-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+        <span />
+        <span>Пользователь</span>
+        <span>Роль</span>
+        <span>Тариф</span>
+        <span className="text-right">LVL · XP</span>
+        <span />
+      </div>
+
+      <div className="mt-1.5 space-y-1.5">
         {users
           .filter((u) => {
             if (filter === "roles") return u.roles.some((r) => r !== "user");
@@ -376,43 +304,58 @@ function AdminPage() {
           const isOpen = expanded === u.id;
           const isSelf = u.id === ctx.userId;
           const disabled = !u.canAct;
+          const role = topRole(u.roles);
+          const paid = u.subscription_tier !== "free" || subActive(u);
           return (
             <div key={u.id} className={`panel rounded-xl ${u.ban ? "border-destructive/40" : ""}`}>
               <button
                 onClick={() => setExpanded(isOpen ? null : u.id)}
-                className="flex w-full items-center gap-3 p-3 text-left"
+                className="grid w-full grid-cols-[2.5rem_1fr_auto] items-center gap-3 p-2.5 text-left sm:grid-cols-[2.5rem_1fr_8rem_7rem_5.5rem_1.25rem]"
               >
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-sm font-bold text-mint">
                   {(u.username ?? "?")[0]?.toUpperCase()}
                 </span>
-                <div className="min-w-0 flex-1">
+
+                <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="truncate text-sm font-semibold">{u.username ?? "—"}</span>
                     {u.verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-cyan-300" />}
                     {isSelf && <span className="rounded bg-mint/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mint">Ты</span>}
-                    {u.roles.map((r) => (
-                      <span key={r} className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${ROLE_COLORS[r] ?? ROLE_COLORS.user}`}>
-                        {ROLE_LABEL[r] ?? r}
-                      </span>
-                    ))}
-                    {u.certs.map((c) => (
-                      <span key={c.id} title={c.name} className="rounded-full border px-1.5 py-0.5 text-[10px]" style={{ borderColor: c.color, color: c.color }}>
-                        {c.icon ?? "★"} {c.name}
-                      </span>
-                    ))}
                     {u.ban && <span className="rounded bg-destructive/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-destructive">Бан</span>}
-                    {(u.subscription_tier !== "free" || subActive(u)) && (
-                      <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${TIER_COLORS[u.subscription_tier] ?? TIER_COLORS.free}`}>
-                        {TIER_LABEL[u.subscription_tier] ?? u.subscription_tier}
-                        {u.subscription_tier !== "lifetime" && u.subscription_until && ` · ${fmtDate(u.subscription_until)}`}
+                    {u.certs.length > 0 && (
+                      <span title={u.certs.map((c) => c.name).join(", ")} className="rounded border border-border/60 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        ★ {u.certs.length}
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    LVL {u.level} · {u.xp} XP · {u.id.slice(0, 8)}
+                  {/* Role/tier/LVL repeated here, compact, for mobile where the
+                      dedicated columns are hidden. */}
+                  <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground sm:hidden">
+                    {role ? `${ROLE_LABEL[role]} · ` : ""}{paid ? `${TIER_LABEL[u.subscription_tier] ?? u.subscription_tier} · ` : ""}LVL {u.level} · {u.xp} XP
                   </p>
                 </div>
-                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+
+                <span className="hidden sm:block">
+                  {role && (
+                    <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${ROLE_COLORS[role] ?? ROLE_COLORS.user}`}>
+                      {ROLE_LABEL[role]}
+                    </span>
+                  )}
+                </span>
+
+                <span className="hidden sm:block">
+                  {paid && (
+                    <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${TIER_COLORS[u.subscription_tier] ?? TIER_COLORS.free}`}>
+                      {TIER_LABEL[u.subscription_tier] ?? u.subscription_tier}
+                    </span>
+                  )}
+                </span>
+
+                <span className="hidden text-right font-mono text-[11px] text-muted-foreground sm:block">
+                  {u.level} · {u.xp}
+                </span>
+
+                <ChevronDown className={`h-4 w-4 shrink-0 justify-self-end transition-transform ${isOpen ? "rotate-180" : ""}`} />
               </button>
 
               {isOpen && (
