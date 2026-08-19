@@ -14,6 +14,7 @@ export function PremiumPaywall({ title, description }: { title?: string; descrip
       </p>
       <Link
         to="/profile"
+        hash="subscription"
         className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-5 py-2.5 text-sm font-semibold text-black transition-transform hover:scale-105"
       >
         <Sparkles className="h-4 w-4" /> Оформить подписку

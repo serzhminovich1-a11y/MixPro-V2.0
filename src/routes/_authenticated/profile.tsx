@@ -5,7 +5,7 @@ import {
   Shield, ShieldCheck, Crown, ImagePlus, Send, Trash2,
   Music4, Loader2, AlertTriangle, BadgeCheck,
   Search, LayoutGrid, List as ListIcon, Plus, ChevronDown, ChevronUp,
-  Play, Heart, MessageCircle, Headphones, KeyRound,
+  Play, Heart, MessageCircle, Headphones, KeyRound, Sparkles, Lock, ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -17,6 +17,7 @@ import { leagueForXp, nextLeague, progressInLeague } from "@/lib/leagues";
 import { uploadWithProgress, removeStorageObjects, formatBytes } from "@/lib/upload-progress";
 import { resolveStorageUrl } from "@/lib/storage-url";
 import { SocialLinksEditor, parseSocials } from "@/components/social-links";
+import { useSubscription } from "@/hooks/use-subscription";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -33,6 +34,18 @@ const ROLE_META: Record<string, { label: string; icon: typeof Shield; className:
   admin: { label: "Админ", icon: ShieldCheck, className: "text-mint border-mint/40 bg-mint/10" },
   moderator: { label: "Модератор", icon: Shield, className: "text-cyan-400 border-cyan-400/40 bg-cyan-400/10" },
 };
+
+const TIER_META: Record<string, { label: string; icon: typeof Sparkles; className: string }> = {
+  free: { label: "Free", icon: Sparkles, className: "text-muted-foreground border-border bg-secondary/40" },
+  trial: { label: "Trial", icon: Sparkles, className: "text-cyan-400 border-cyan-400/40 bg-cyan-400/10" },
+  pro: { label: "PRO", icon: Sparkles, className: "text-amber-300 border-amber-400/40 bg-amber-400/10" },
+  lifetime: { label: "Lifetime", icon: Crown, className: "text-violet-300 border-violet/40 bg-violet/10" },
+};
+const TIER_PERKS = [
+  "Все платные уроки и курсы без ограничений",
+  "Полный каталог пресетов, включая PRO-пресеты",
+  "Приоритетная поддержка в Telegram",
+];
 
 
 type StoredTrack = {
@@ -80,6 +93,7 @@ type PendingTrack = {
 
 function ProfilePage() {
   const { user } = Route.useRouteContext();
+  const sub = useSubscription();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [avatarSigned, setAvatarSigned] = useState<string | null>(null);
   const [scores, setScores] = useState<GameScore[]>([]);
@@ -458,6 +472,12 @@ function ProfilePage() {
                       <roleMeta.icon className="h-3.5 w-3.5" /> {roleMeta.label}
                     </span>
                   )}
+                  {!sub.loading && sub.active && sub.tier !== "free" && (
+                    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${TIER_META[sub.tier]?.className ?? TIER_META.pro.className}`}>
+                      {(() => { const TierIcon = TIER_META[sub.tier]?.icon ?? Sparkles; return <TierIcon className="h-3.5 w-3.5" />; })()}
+                      {TIER_META[sub.tier]?.label ?? sub.tier}
+                    </span>
+                  )}
                   <span
                     title={`Лига: ${league.name}`}
                     className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-bold ${league.color} ${league.bg} ${league.border}`}
@@ -503,6 +523,73 @@ function ProfilePage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Subscription */}
+      <div id="subscription" className="glass mt-4 scroll-mt-20 rounded-2xl p-5 md:p-6">
+        <div className="flex items-center gap-2">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-400/10 text-amber-300">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Моя подписка</h2>
+        </div>
+
+        {sub.loading ? (
+          <div className="mt-4 h-16 animate-pulse rounded-xl bg-secondary/40" />
+        ) : sub.active && sub.tier !== "free" ? (
+          <div className="mt-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-bold ${TIER_META[sub.tier]?.className ?? TIER_META.pro.className}`}>
+                {(() => { const TierIcon = TIER_META[sub.tier]?.icon ?? Sparkles; return <TierIcon className="h-4 w-4" />; })()}
+                {TIER_META[sub.tier]?.label ?? sub.tier}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {sub.tier === "lifetime" || !sub.until
+                  ? "Действует бессрочно"
+                  : <>Действует до <span className="font-semibold text-foreground">{new Date(sub.until).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</span></>}
+              </span>
+            </div>
+            <ul className="mt-4 space-y-1.5">
+              {TIER_PERKS.map((perk) => (
+                <li key={perk} className="flex items-start gap-2 text-sm text-foreground/80">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-mint" /> {perk}
+                </li>
+              ))}
+            </ul>
+            <a
+              href="https://t.me/mixpro_support"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Продлить или сменить тариф — написать в поддержку <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Lock className="h-4 w-4" /> Сейчас у тебя тариф <span className="font-semibold text-foreground">Free</span>
+            </div>
+            <ul className="mt-4 space-y-1.5">
+              {TIER_PERKS.map((perk) => (
+                <li key={perk} className="flex items-start gap-2 text-sm text-foreground/70">
+                  <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" /> {perk}
+                </li>
+              ))}
+            </ul>
+            <a
+              href="https://t.me/mixpro_support"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-2 text-sm font-semibold text-black transition-transform hover:scale-105"
+            >
+              <Sparkles className="h-4 w-4" /> Оформить подписку
+            </a>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Онлайн-оплата пока не подключена — тариф выдаётся вручную через поддержку в Telegram.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Password */}
