@@ -6,11 +6,13 @@ import {
   Palette, Highlighter, List as ListIcon, ListOrdered, Quote,
   AlignLeft, AlignCenter, AlignRight, Link as LinkIcon, Link2Off,
   ImagePlus, Sigma, Table as TableIcon, Upload, Eraser, Terminal,
-  Type,
+  Type, Sparkles, Send, Loader2,
 } from "lucide-react";
 import { createUploadUrl } from "@/lib/storage.functions";
 import { publicStorageUrl } from "@/lib/storage-url";
 import { formatBytes } from "@/lib/upload-progress";
+import { aiEditText } from "@/lib/ai.functions";
+import { sanitizeInlineHtml } from "@/lib/course-blocks";
 
 type UploadItem = { id: string; name: string; loaded: number; total: number; pct: number; done?: boolean; error?: string };
 
@@ -73,6 +75,10 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const createUrl = useServerFn(createUploadUrl);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const runAiFn = useServerFn(aiEditText);
   // Toolbar <select>s (font/size) steal focus the moment they're clicked,
   // which collapses window.getSelection() before their onChange fires —
   // so wrapSelection can't read it live. Mirror the live selection here
@@ -211,6 +217,42 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
     const f = prompt("Формула (LaTeX-подобная):", "E = mc^2");
     if (f) insertHTML(`<code class="math">${f}</code>`);
   }
+  /** The HTML of the current text selection, or null if there isn't one
+   * (matching wrapSelection's own check) — used to decide whether an AI
+   * request acts on just the selected passage or the whole field. */
+  function getSelectedHtml(): string | null {
+    const range = savedRangeRef.current;
+    if (!range || range.collapsed || !ref.current?.contains(range.commonAncestorContainer)) return null;
+    const container = document.createElement("div");
+    container.appendChild(range.cloneContents());
+    return container.innerHTML;
+  }
+  async function runAi(mode: "cleanup" | "expand" | "chat", instruction?: string) {
+    if (!ref.current || aiBusy) return;
+    const selectedHtml = getSelectedHtml();
+    const targetHtml = selectedHtml ?? ref.current.innerHTML;
+    setAiBusy(true);
+    try {
+      const { html } = await runAiFn({ data: { mode, html: targetHtml, instruction } });
+      const clean = sanitizeInlineHtml(html);
+      if (!selectedHtml) {
+        // Nothing was selected — manufacture a "select everything" range so
+        // the insertHTML() below still goes through execCommand (and is
+        // thus undoable via Ctrl+Z like every other edit) instead of a raw
+        // innerHTML write that would silently sit outside the undo stack.
+        const range = document.createRange();
+        range.selectNodeContents(ref.current);
+        savedRangeRef.current = range;
+      }
+      insertHTML(clean); // restores the (real or manufactured) selection, then replaces it
+      setAiOpen(false);
+      setAiInstruction("");
+    } catch (e: any) {
+      toast.error(e.message ?? "Ошибка ИИ");
+    } finally {
+      setAiBusy(false);
+    }
+  }
   function insertTable() {
     const cols = Math.max(1, Math.min(8, Number(prompt("Колонок?", "3") ?? 3)));
     const rows = Math.max(1, Math.min(20, Number(prompt("Строк?", "3") ?? 3)));
@@ -305,6 +347,16 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
           if (e.target instanceof HTMLButtonElement) ref.current?.focus();
         }}
       >
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); setAiOpen((o) => !o); }}
+          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] font-medium transition-colors ${aiOpen ? "border-violet-400/50 bg-violet-500/20 text-violet-200" : "border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/15"}`}
+          title="Помощь ИИ: почистить, дописать или переделать текст"
+        >
+          <Sparkles className="h-4 w-4" /> ИИ
+        </button>
+        <Divider />
+
         <ToolBtn onClick={() => exec("undo")} title="Отменить"><Undo2 className="h-4 w-4" /></ToolBtn>
         <ToolBtn onClick={() => exec("redo")} title="Вернуть"><Redo2 className="h-4 w-4" /></ToolBtn>
         <Divider />
@@ -396,6 +448,51 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 260, 
           <Terminal className="h-4 w-4" /> Source
         </button>
       </div>
+
+      {aiOpen && (
+        <div className="space-y-2 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              disabled={aiBusy}
+              onMouseDown={(e) => { e.preventDefault(); runAi("cleanup"); }}
+              className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+            >
+              Причесать
+            </button>
+            <button
+              type="button"
+              disabled={aiBusy}
+              onMouseDown={(e) => { e.preventDefault(); runAi("expand"); }}
+              className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+            >
+              Дописать
+            </button>
+          </div>
+          <form
+            onSubmit={(e) => { e.preventDefault(); if (aiInstruction.trim()) runAi("chat", aiInstruction.trim()); }}
+            className="flex items-center gap-1.5"
+          >
+            <input
+              value={aiInstruction}
+              onChange={(e) => setAiInstruction(e.target.value)}
+              placeholder="Своя команда: сократи вдвое, добавь пример, переведи в списки…"
+              disabled={aiBusy}
+              className="flex-1 rounded-md border border-white/10 bg-black/40 px-2.5 py-1.5 text-xs text-gray-200 outline-none placeholder:text-gray-500 focus:border-violet-400/40"
+            />
+            <button
+              type="submit"
+              disabled={aiBusy || !aiInstruction.trim()}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-violet-500/80 text-white hover:bg-violet-500 disabled:opacity-40"
+            >
+              {aiBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            </button>
+          </form>
+          <p className="text-[10px] text-gray-500">
+            Если в тексте есть выделение — ИИ работает только с ним, иначе — со всем текстом. Результат можно отменить (Ctrl+Z / кнопка «Отменить»).
+          </p>
+        </div>
+      )}
 
       {sourceMode ? (
         <textarea
