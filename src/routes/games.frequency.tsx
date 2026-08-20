@@ -34,14 +34,12 @@ export const Route = createFileRoute("/games/frequency")({
 const THEME_KEY = "mixpro.frequency.theme";
 const SETTINGS_KEY = "mixpro.frequency.settings";
 const VOLUME_KEY = "mixpro.frequency.volume";
-const VIZ_KEY = "mixpro.frequency.viz";
-
-const VIZ_OPTIONS: { id: VizMode; name: string; hint: string }[] = [
-  { id: "spectrum",    name: "Спектр",       hint: "FFT-анализатор" },
-  { id: "wave",        name: "Осциллограф",  hint: "форма сигнала во времени" },
-  { id: "spectrogram", name: "Спектрограмма", hint: "цветовая карта частоты × времени" },
-  { id: "meter",       name: "Уровнемер",    hint: "RMS + Peak в дБ" },
-];
+// Was a picker of 4 visualization modes (spectrum/wave/spectrogram/meter).
+// Reduced to spectrum-only by request — matches the reference (Mastering
+// The Mix's "EQ Academy"): one FFT view with the EQ curve overlaid, no mode
+// switcher. viz/onVizChange plumbing below is kept as-is (just never
+// exercised anymore) rather than threading a bigger refactor through
+// EqChart/SignalVisualizer for a UI-only removal.
 
 type Mode = "ranked" | "practice";
 type Difficulty = "easy" | "medium" | "hard" | "god";
@@ -150,14 +148,11 @@ function FrequencyGame() {
         const n = Number(v);
         if (Number.isFinite(n)) setVolume(Math.max(0, Math.min(100, Math.round(n))));
       }
-      const vz = window.localStorage.getItem(VIZ_KEY);
-      if (vz && VIZ_OPTIONS.some((o) => o.id === vz)) setViz(vz as VizMode);
+      // No more viz-mode restore from localStorage — always spectrum now,
+      // and a stale saved choice from before this change (wave/spectrogram/
+      // meter) shouldn't silently reappear with no UI left to change it back.
     }
   }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") window.localStorage.setItem(VIZ_KEY, viz);
-  }, [viz]);
 
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem(THEME_KEY, themeId);
@@ -678,27 +673,12 @@ function PlayScreen({
         </div>
       </div>
 
-      {/* Visualization mode picker */}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--fq-muted)" }}>Метрика:</span>
-        {VIZ_OPTIONS.map((o) => {
-          const active = o.id === viz;
-          return (
-            <button
-              key={o.id}
-              type="button"
-              onClick={() => onVizChange(o.id)}
-              title={o.hint}
-              className="rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-widest transition-all"
-              style={active
-                ? { borderColor: "var(--fq-acc)", background: "var(--fq-acc)", color: "var(--fq-acc-ink)" }
-                : { borderColor: "var(--fq-border)", background: "var(--fq-panel)", color: "var(--fq-text)" }}
-            >
-              {o.name}
-            </button>
-          );
-        })}
-        <span className="ml-auto hidden font-mono text-[10px] uppercase tracking-widest md:inline" style={{ color: playing || compare ? "var(--fq-acc)" : "var(--fq-muted)" }}>
+      {/* Signal status — the mode picker that used to live here (spectrum/
+          wave/spectrogram/meter) was removed by request; spectrum is now
+          the only view, matching the reference (Mastering The Mix's EQ
+          Academy). */}
+      <div className="mt-4 flex items-center justify-end">
+        <span className="hidden font-mono text-[10px] uppercase tracking-widest md:inline" style={{ color: playing || compare ? "var(--fq-acc)" : "var(--fq-muted)" }}>
           {compare ? "A · оригинал" : playing ? "Б · с бустом" : "тишина"}
         </span>
       </div>
