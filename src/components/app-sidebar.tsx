@@ -20,6 +20,7 @@ import {
   BookOpen,
   Library,
   Waves,
+  ShoppingBag,
   ShieldAlert,
   ShieldCheck,
   Bell,
@@ -54,6 +55,7 @@ const groups: Group[] = [
       { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "ADM" },
       { label: "Глоссарий", to: "/admin/glossary", icon: Library, badge: "ADM" },
       { label: "Библиотека лупов", to: "/admin/loops", icon: Waves, badge: "ADM" },
+      { label: "Магазин", to: "/admin/merch", icon: ShoppingBag, badge: "ADM" },
       { label: "Модерация", to: "/moderation", icon: ShieldAlert, badge: "ADM" },
     ],
   },
@@ -72,6 +74,7 @@ const groups: Group[] = [
       { label: "Модерация", to: "/moderation", icon: ShieldAlert, badge: "MOD" },
       { label: "Журнал действий", to: "/admin/log", icon: ScrollText, badge: "MOD" },
       { label: "Курсы · редактор", to: "/admin/courses", icon: BookOpen, badge: "MOD" },
+      { label: "Магазин", to: "/admin/merch", icon: ShoppingBag, badge: "MOD" },
     ],
   },
   {

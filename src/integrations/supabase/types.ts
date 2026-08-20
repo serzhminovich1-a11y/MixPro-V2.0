@@ -836,6 +836,45 @@ export type Database = {
           },
         ]
       }
+      merch_items: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean
+          name: string
+          price_label: string
+          sort_order: number
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name: string
+          price_label?: string
+          sort_order?: number
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name?: string
+          price_label?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       presets: {
         Row: {
           author_id: string
@@ -887,6 +926,7 @@ export type Database = {
           id: string
           level: number
           socials: Json
+          status_text: string | null
           subscription_tier: string
           subscription_until: string | null
           updated_at: string
@@ -905,6 +945,7 @@ export type Database = {
           id: string
           level?: number
           socials?: Json
+          status_text?: string | null
           subscription_tier?: string
           subscription_until?: string | null
           updated_at?: string
@@ -923,12 +964,40 @@ export type Database = {
           id?: string
           level?: number
           socials?: Json
+          status_text?: string | null
           subscription_tier?: string
           subscription_until?: string | null
           updated_at?: string
           username?: string
           verified?: boolean
           xp?: number
+        }
+        Relationships: []
+      }
+      screenshots: {
+        Row: {
+          author_id: string
+          caption: string | null
+          created_at: string
+          id: string
+          image_url: string
+          is_hidden: boolean
+        }
+        Insert: {
+          author_id: string
+          caption?: string | null
+          created_at?: string
+          id?: string
+          image_url: string
+          is_hidden?: boolean
+        }
+        Update: {
+          author_id?: string
+          caption?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string
+          is_hidden?: boolean
         }
         Relationships: []
       }

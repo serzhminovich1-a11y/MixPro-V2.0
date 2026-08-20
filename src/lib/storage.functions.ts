@@ -2,12 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const PREFIXES = ["avatars", "banners", "wall", "presets", "lesson-assets", "game-loops"] as const;
+const PREFIXES = ["avatars", "banners", "wall", "presets", "lesson-assets", "game-loops", "merch", "screenshots"] as const;
 type Prefix = (typeof PREFIXES)[number];
-// lesson-assets/game-loops are admin-authored content (lesson media, ear
-// -training loops) — only moderators write there. The rest are
-// self-service (a user's own avatar/portfolio/preset).
-const MODERATOR_ONLY: ReadonlySet<Prefix> = new Set(["lesson-assets", "game-loops"]);
+// lesson-assets/game-loops/merch are admin-authored content (lesson media,
+// ear-training loops, shop item photos) — only moderators write there. The
+// rest are self-service (a user's own avatar/portfolio/preset).
+const MODERATOR_ONLY: ReadonlySet<Prefix> = new Set(["lesson-assets", "game-loops", "merch"]);
 
 async function isModerator(supabase: any, userId: string): Promise<boolean> {
   const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);

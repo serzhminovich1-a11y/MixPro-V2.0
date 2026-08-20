@@ -7,6 +7,7 @@ import {
   Gamepad2,
   GraduationCap,
   SlidersHorizontal,
+  ShoppingBag,
   MessagesSquare,
   MessageCircle,
   Play,
@@ -41,6 +42,7 @@ const tools = [
 
   { to: "/glossary", label: "Термины", icon: BookMarked },
   { to: "/presets", label: "Пресеты", icon: SlidersHorizontal },
+  { to: "/shop", label: "Магазин", icon: ShoppingBag },
   // Back in the nav, but greyed out / not clickable — "в следующем
   // обновлении" — until Форум and Чат are actually ready to ship.
   { to: "/forum", label: "Форум", icon: MessagesSquare, disabled: true },

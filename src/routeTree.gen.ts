@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ShopRouteImport } from './routes/shop'
 import { Route as PresetsRouteImport } from './routes/presets'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as GlossaryRouteImport } from './routes/glossary'
@@ -52,6 +53,7 @@ import { Route as AuthenticatedPostPostIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedMessagesThreadIdRouteImport } from './routes/_authenticated/messages.$threadId'
 import { Route as AuthenticatedAdminTeamRouteImport } from './routes/_authenticated/admin.team'
 import { Route as AuthenticatedAdminSubscriptionsRouteImport } from './routes/_authenticated/admin.subscriptions'
+import { Route as AuthenticatedAdminMerchRouteImport } from './routes/_authenticated/admin.merch'
 import { Route as AuthenticatedAdminLoopsRouteImport } from './routes/_authenticated/admin.loops'
 import { Route as AuthenticatedAdminLogRouteImport } from './routes/_authenticated/admin.log'
 import { Route as AuthenticatedAdminGlossaryRouteImport } from './routes/_authenticated/admin.glossary'
@@ -59,6 +61,11 @@ import { Route as AuthenticatedAdminForumRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminDashboardRouteImport } from './routes/_authenticated/admin.dashboard'
 import { Route as AuthenticatedAdminCoursesRouteImport } from './routes/_authenticated/admin.courses'
 
+const ShopRoute = ShopRouteImport.update({
+  id: '/shop',
+  path: '/shop',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PresetsRoute = PresetsRouteImport.update({
   id: '/presets',
   path: '/presets',
@@ -276,6 +283,11 @@ const AuthenticatedAdminSubscriptionsRoute =
     path: '/admin/subscriptions',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminMerchRoute = AuthenticatedAdminMerchRouteImport.update({
+  id: '/admin/merch',
+  path: '/admin/merch',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAdminLoopsRoute = AuthenticatedAdminLoopsRouteImport.update({
   id: '/admin/loops',
   path: '/admin/loops',
@@ -320,6 +332,7 @@ export interface FileRoutesByFullPath {
   '/glossary': typeof GlossaryRoute
   '/leaderboard': typeof LeaderboardRoute
   '/presets': typeof PresetsRoute
+  '/shop': typeof ShopRoute
   '/chat': typeof AuthenticatedChatRoute
   '/messages': typeof AuthenticatedMessagesRouteWithChildren
   '/moderation': typeof AuthenticatedModerationRoute
@@ -353,6 +366,7 @@ export interface FileRoutesByFullPath {
   '/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
   '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
+  '/admin/merch': typeof AuthenticatedAdminMerchRoute
   '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/admin/team': typeof AuthenticatedAdminTeamRoute
   '/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
@@ -370,6 +384,7 @@ export interface FileRoutesByTo {
   '/glossary': typeof GlossaryRoute
   '/leaderboard': typeof LeaderboardRoute
   '/presets': typeof PresetsRoute
+  '/shop': typeof ShopRoute
   '/chat': typeof AuthenticatedChatRoute
   '/messages': typeof AuthenticatedMessagesRouteWithChildren
   '/moderation': typeof AuthenticatedModerationRoute
@@ -403,6 +418,7 @@ export interface FileRoutesByTo {
   '/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
   '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
+  '/admin/merch': typeof AuthenticatedAdminMerchRoute
   '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/admin/team': typeof AuthenticatedAdminTeamRoute
   '/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
@@ -422,6 +438,7 @@ export interface FileRoutesById {
   '/glossary': typeof GlossaryRoute
   '/leaderboard': typeof LeaderboardRoute
   '/presets': typeof PresetsRoute
+  '/shop': typeof ShopRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/messages': typeof AuthenticatedMessagesRouteWithChildren
   '/_authenticated/moderation': typeof AuthenticatedModerationRoute
@@ -455,6 +472,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/glossary': typeof AuthenticatedAdminGlossaryRoute
   '/_authenticated/admin/log': typeof AuthenticatedAdminLogRoute
   '/_authenticated/admin/loops': typeof AuthenticatedAdminLoopsRoute
+  '/_authenticated/admin/merch': typeof AuthenticatedAdminMerchRoute
   '/_authenticated/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/_authenticated/admin/team': typeof AuthenticatedAdminTeamRoute
   '/_authenticated/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
@@ -474,6 +492,7 @@ export interface FileRouteTypes {
     | '/glossary'
     | '/leaderboard'
     | '/presets'
+    | '/shop'
     | '/chat'
     | '/messages'
     | '/moderation'
@@ -507,6 +526,7 @@ export interface FileRouteTypes {
     | '/admin/glossary'
     | '/admin/log'
     | '/admin/loops'
+    | '/admin/merch'
     | '/admin/subscriptions'
     | '/admin/team'
     | '/messages/$threadId'
@@ -524,6 +544,7 @@ export interface FileRouteTypes {
     | '/glossary'
     | '/leaderboard'
     | '/presets'
+    | '/shop'
     | '/chat'
     | '/messages'
     | '/moderation'
@@ -557,6 +578,7 @@ export interface FileRouteTypes {
     | '/admin/glossary'
     | '/admin/log'
     | '/admin/loops'
+    | '/admin/merch'
     | '/admin/subscriptions'
     | '/admin/team'
     | '/messages/$threadId'
@@ -575,6 +597,7 @@ export interface FileRouteTypes {
     | '/glossary'
     | '/leaderboard'
     | '/presets'
+    | '/shop'
     | '/_authenticated/chat'
     | '/_authenticated/messages'
     | '/_authenticated/moderation'
@@ -608,6 +631,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/glossary'
     | '/_authenticated/admin/log'
     | '/_authenticated/admin/loops'
+    | '/_authenticated/admin/merch'
     | '/_authenticated/admin/subscriptions'
     | '/_authenticated/admin/team'
     | '/_authenticated/messages/$threadId'
@@ -627,6 +651,7 @@ export interface RootRouteChildren {
   GlossaryRoute: typeof GlossaryRoute
   LeaderboardRoute: typeof LeaderboardRoute
   PresetsRoute: typeof PresetsRoute
+  ShopRoute: typeof ShopRoute
   ForumCategoryRoute: typeof ForumCategoryRoute
   GamesCompressionRoute: typeof GamesCompressionRoute
   GamesCompressorAttackRoute: typeof GamesCompressorAttackRoute
@@ -652,6 +677,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/shop': {
+      id: '/shop'
+      path: '/shop'
+      fullPath: '/shop'
+      preLoaderRoute: typeof ShopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/presets': {
       id: '/presets'
       path: '/presets'
@@ -953,6 +985,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminSubscriptionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/merch': {
+      id: '/_authenticated/admin/merch'
+      path: '/admin/merch'
+      fullPath: '/admin/merch'
+      preLoaderRoute: typeof AuthenticatedAdminMerchRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/loops': {
       id: '/_authenticated/admin/loops'
       path: '/admin/loops'
@@ -1023,6 +1062,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminGlossaryRoute: typeof AuthenticatedAdminGlossaryRoute
   AuthenticatedAdminLogRoute: typeof AuthenticatedAdminLogRoute
   AuthenticatedAdminLoopsRoute: typeof AuthenticatedAdminLoopsRoute
+  AuthenticatedAdminMerchRoute: typeof AuthenticatedAdminMerchRoute
   AuthenticatedAdminSubscriptionsRoute: typeof AuthenticatedAdminSubscriptionsRoute
   AuthenticatedAdminTeamRoute: typeof AuthenticatedAdminTeamRoute
   AuthenticatedPostPostIdRoute: typeof AuthenticatedPostPostIdRoute
@@ -1041,6 +1081,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminGlossaryRoute: AuthenticatedAdminGlossaryRoute,
   AuthenticatedAdminLogRoute: AuthenticatedAdminLogRoute,
   AuthenticatedAdminLoopsRoute: AuthenticatedAdminLoopsRoute,
+  AuthenticatedAdminMerchRoute: AuthenticatedAdminMerchRoute,
   AuthenticatedAdminSubscriptionsRoute: AuthenticatedAdminSubscriptionsRoute,
   AuthenticatedAdminTeamRoute: AuthenticatedAdminTeamRoute,
   AuthenticatedPostPostIdRoute: AuthenticatedPostPostIdRoute,
@@ -1082,6 +1123,7 @@ const rootRouteChildren: RootRouteChildren = {
   GlossaryRoute: GlossaryRoute,
   LeaderboardRoute: LeaderboardRoute,
   PresetsRoute: PresetsRoute,
+  ShopRoute: ShopRoute,
   ForumCategoryRoute: ForumCategoryRoute,
   GamesCompressionRoute: GamesCompressionRoute,
   GamesCompressorAttackRoute: GamesCompressorAttackRoute,

@@ -13,6 +13,7 @@ import { BannerImage } from "@/components/banner-image";
 import { accentHex, fontFamily, tenureLabel } from "@/lib/profile-customization";
 import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
 import { PremiumBadge } from "@/components/premium-paywall";
+import { ScreenshotGallery } from "@/components/screenshot-gallery";
 
 const profileQuery = (username: string) =>
   queryOptions({
@@ -101,9 +102,19 @@ function PublicProfilePage() {
   const accent = accentHex(p.accent_color);
   const nameFont = fontFamily(p.display_font);
   const badges: ProfileBadge[] = (data.certs ?? []).map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon, awardedAt: c.awarded_at }));
+  const showPremiumBg = data.isPremium && !!p.banner_url;
 
   return (
     <>
+      {/* Full-page ambient background — PRO/Lifetime-only perk, same
+          treatment as the owner's own view. See profile.tsx for why this
+          is position:fixed rather than the hero's w-full technique. */}
+      {showPremiumBg && (
+        <div className="pointer-events-none fixed inset-0 -z-10">
+          <BannerImage path={p.banner_url} className="h-full w-full object-cover" style={{ filter: "brightness(0.4) saturate(1.15) blur(6px)" }} />
+          <div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 0%, transparent, var(--background) 78%)" }} />
+        </div>
+      )}
       {/* Full-width hero — spans the whole visible content area instead of a
           small boxed card, same treatment as the owner's own view, read-only
           here. See profile.tsx for why this is a plain w-full and not the
@@ -132,6 +143,11 @@ function PublicProfilePage() {
               {p.verified && <BadgeCheck className="h-5 w-5 text-cyan" />}
             </div>
             {p.full_name && <p className="mt-1 truncate text-sm font-medium text-foreground/90">{p.full_name}</p>}
+            {p.status_text && (
+              <p className="mt-1 inline-flex items-center gap-1.5 truncate rounded-md bg-secondary/50 px-2 py-1 text-sm text-foreground/85">
+                {p.status_text}
+              </p>
+            )}
             {/* Each stat is its own self-contained chip (not text joined by
                 "·" separators) — with flex-wrap, a standalone separator
                 span can end up orphaned alone at the end of a wrapped
@@ -224,6 +240,13 @@ function PublicProfilePage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {data.screenshots.length > 0 && (
+          <div className="glass mt-5 rounded-2xl p-5">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Скриншоты · {data.screenshots.length}</p>
+            <ScreenshotGallery screenshots={data.screenshots} />
           </div>
         )}
 

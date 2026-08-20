@@ -17,6 +17,8 @@ export const STORAGE_PREFIX = {
   presets: "presets",
   lessonAssets: "lesson-assets",
   gameLoops: "game-loops",
+  merch: "merch",
+  screenshots: "screenshots",
 } as const;
 type PrefixKey = keyof typeof STORAGE_PREFIX;
 

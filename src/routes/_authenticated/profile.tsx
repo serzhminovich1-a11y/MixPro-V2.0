@@ -23,6 +23,7 @@ import { ROLE_RULES, EXTRA_PERMISSION_LABEL, type StaffRole } from "@/lib/role-r
 import { ACCENT_COLORS, DISPLAY_FONTS, accentHex, fontFamily, tenureLabel } from "@/lib/profile-customization";
 import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
 import { PremiumBadge } from "@/components/premium-paywall";
+import { ScreenshotGallery, type GalleryScreenshot } from "@/components/screenshot-gallery";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -109,11 +110,13 @@ function ProfilePage() {
   const [lessonsDone, setLessonsDone] = useState(0);
   const [presetsCount, setPresetsCount] = useState(0);
   const [myPresets, setMyPresets] = useState<Tables<"presets">[]>([]);
+  const [screenshots, setScreenshots] = useState<GalleryScreenshot[]>([]);
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const [roles, setRoles] = useState<string[]>([]);
   const [staffPerms, setStaffPerms] = useState<{ can_manage_courses: boolean; can_view_finances: boolean } | null>(null);
   const [badges, setBadges] = useState<ProfileBadge[]>([]);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ username: "", full_name: "", bio: "" });
+  const [form, setForm] = useState({ username: "", full_name: "", bio: "", status_text: "" });
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -142,6 +145,7 @@ function ProfilePage() {
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const trackInputRef = useRef<HTMLInputElement>(null);
+  const screenshotInputRef = useRef<HTMLInputElement>(null);
 
   const isSuperAdmin = roles.includes("super_admin");
   const canModerate = roles.some((r) => r === "moderator" || r === "admin" || r === "super_admin");
@@ -197,7 +201,7 @@ function ProfilePage() {
 
   useEffect(() => {
     async function load() {
-      const [p, s, lp, pr, rl, sp, uc, ac] = await Promise.all([
+      const [p, s, lp, pr, rl, sp, uc, ac, sh] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
         supabase.from("game_scores").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
         supabase.from("lesson_progress").select("id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -208,10 +212,11 @@ function ProfilePage() {
         // else certifications are read (see admin.index.tsx, public.functions.ts).
         supabase.from("user_certifications").select("certification_id, awarded_at").eq("user_id", user.id),
         supabase.from("certifications").select("id, name, color, icon"),
+        supabase.from("screenshots").select("id, image_url, caption").eq("author_id", user.id).order("created_at", { ascending: false }),
       ]);
       if (p.data) {
         setProfile(p.data);
-        setForm({ username: p.data.username ?? "", full_name: p.data.full_name ?? "", bio: p.data.bio ?? "" });
+        setForm({ username: p.data.username ?? "", full_name: p.data.full_name ?? "", bio: p.data.bio ?? "", status_text: p.data.status_text ?? "" });
         const signed = p.data.avatar_url ? await signUrl("avatars", p.data.avatar_url) : null;
         setAvatarSigned(signed);
         const bannerSigned = p.data.banner_url ? await signUrl("banners", p.data.banner_url) : null;
@@ -220,6 +225,7 @@ function ProfilePage() {
       if (s.data) setScores(s.data);
       setLessonsDone(lp.count ?? 0);
       if (pr.data) { setMyPresets(pr.data); setPresetsCount(pr.data.length); }
+      if (sh.data) setScreenshots(sh.data);
       if (rl.data) setRoles(rl.data.map((r) => r.role as string));
       if (sp.data) setStaffPerms(sp.data);
       const certMap = new Map((ac.data ?? []).map((c) => [c.id, c]));
@@ -243,10 +249,11 @@ function ProfilePage() {
       username: form.username.trim(),
       full_name: form.full_name.trim() || null,
       bio: form.bio.trim() || null,
+      status_text: form.status_text.trim() || null,
     }).eq("id", user.id);
     setSaving(false);
     if (!error) {
-      setProfile({ ...profile, username: form.username.trim(), full_name: form.full_name.trim() || null, bio: form.bio.trim() || null });
+      setProfile({ ...profile, username: form.username.trim(), full_name: form.full_name.trim() || null, bio: form.bio.trim() || null, status_text: form.status_text.trim() || null });
       setEditing(false);
     }
   }
@@ -343,6 +350,30 @@ function ProfilePage() {
     }
     setUploadingBanner(false);
     setPendingBanner(null);
+  }
+
+  async function onScreenshotsPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []).slice(0, 6);
+    if (screenshotInputRef.current) screenshotInputRef.current.value = "";
+    if (files.length === 0) return;
+    setUploadingScreenshot(true);
+    for (const file of files) {
+      if (file.size > 12 * 1024 * 1024) continue;
+      const { error, path } = await uploadWithProgress("screenshots", file.name, file, { contentType: file.type || undefined });
+      if (error || !path) continue;
+      const { data: row } = await supabase.from("screenshots").insert({ author_id: user.id, image_url: path }).select("id, image_url, caption").single();
+      if (row) setScreenshots((prev) => [row, ...prev]);
+    }
+    setUploadingScreenshot(false);
+  }
+
+  async function deleteScreenshot(id: string) {
+    const shot = screenshots.find((s) => s.id === id);
+    if (!shot) return;
+    if (!confirm("Удалить скриншот?")) return;
+    removeStorageObjects([shot.image_url]);
+    await supabase.from("screenshots").delete().eq("id", id);
+    setScreenshots((prev) => prev.filter((s) => s.id !== id));
   }
 
   async function setAccentColor(id: string) {
@@ -492,9 +523,25 @@ function ProfilePage() {
   const accent = accentHex(profile?.accent_color);
   const nameFont = fontFamily(profile?.display_font);
 
+  const showPremiumBg = sub.active && sub.tier !== "free" && !!bannerSigned;
+
   return (
     <>
       <UploadProgressPanel uploads={uploads} />
+      {/* Full-page ambient background — a PRO/Lifetime-only perk (per the
+          Steam reference: customization tied to a paid tier). position:
+          fixed is used deliberately instead of the w-full hero technique
+          below: it's always relative to the true viewport regardless of
+          the sidebar, no breakout trick needed, and it stays put while
+          the page scrolls. Cards keep their own opaque background, so
+          this only shows through the gaps between them — an ambient glow,
+          not a full Steam-style bleed-through. */}
+      {showPremiumBg && (
+        <div className="pointer-events-none fixed inset-0 -z-10">
+          <img src={bannerSigned ?? undefined} alt="" className="h-full w-full object-cover" style={{ filter: "brightness(0.4) saturate(1.15) blur(6px)" }} />
+          <div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 0%, transparent, var(--background) 78%)" }} />
+        </div>
+      )}
       {/* Full-width hero — spans the whole visible content area instead of
           living inside a small boxed card, so the header actually reads
           as a showcase page (Steam-style) instead of a form floating in a
@@ -574,6 +621,8 @@ function ProfilePage() {
                   className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-lg font-semibold outline-none focus:ring-2 focus:ring-ring" />
                 <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Имя и фамилия (ФИО)" maxLength={100}
                   className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring" />
+                <input value={form.status_text} onChange={(e) => setForm({ ...form, status_text: e.target.value })} placeholder="Статус (например: 🎧 Свожу трек)" maxLength={60}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring" />
                 <textarea value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} placeholder="О себе (стиль, DAW, инструменты...)" maxLength={500} rows={3}
                   className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
 
@@ -615,6 +664,14 @@ function ProfilePage() {
                     ))}
                   </div>
                 </div>
+
+                {!sub.loading && (!sub.active || sub.tier === "free") ? (
+                  <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+                    ✨ С подпиской PRO или Lifetime баннер становится фоном всей страницы профиля, а не только шапки.
+                  </p>
+                ) : bannerSigned ? (
+                  <p className="text-xs text-mint">✨ Полноэкранный фон включён — баннер также подсвечивает всю страницу.</p>
+                ) : null}
 
                 <div className="flex gap-2">
                   <button onClick={saveProfile} disabled={saving} className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
@@ -661,6 +718,11 @@ function ProfilePage() {
                   </button>
                 </div>
                 {profile?.full_name && <p className="mt-1 text-sm font-medium text-foreground/90">{profile.full_name}</p>}
+                {profile?.status_text && (
+                  <p className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-secondary/50 px-2 py-1 text-sm text-foreground/85">
+                    {profile.status_text}
+                  </p>
+                )}
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <span>{user.email}</span>
                   {profile?.created_at && (
@@ -729,6 +791,28 @@ function ProfilePage() {
           </div>
         </div>
       )}
+
+      <div className="glass mt-4 rounded-2xl p-5 md:p-6">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Скриншоты{screenshots.length > 0 ? ` · ${screenshots.length}` : ""}</p>
+          <button
+            type="button"
+            onClick={() => screenshotInputRef.current?.click()}
+            disabled={uploadingScreenshot}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-mint hover:underline disabled:opacity-50"
+          >
+            <ImagePlus className="h-3.5 w-3.5" /> {uploadingScreenshot ? "Загрузка…" : "Добавить"}
+          </button>
+          <input ref={screenshotInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onScreenshotsPick} />
+        </div>
+        {screenshots.length > 0 ? (
+          <div className="mt-3">
+            <ScreenshotGallery screenshots={screenshots} onDelete={deleteScreenshot} />
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">Скриншотов пока нет — добавь пару кадров из своей студии или процесса работы.</p>
+        )}
+      </div>
 
       {/* Subscription */}
       <div id="subscription" className="glass mt-4 scroll-mt-20 rounded-2xl p-5 md:p-6">

@@ -32,12 +32,13 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
     // This silently 404'd every public profile page before this fix.
     const { data, error } = await s
       .from("profiles")
-      .select("id, username, avatar_url, banner_url, accent_color, display_font, xp, level, verified, created_at, bio, full_name, socials")
+      .select("id, username, avatar_url, banner_url, accent_color, display_font, xp, level, verified, created_at, bio, full_name, socials, status_text")
       .ilike("username", input.username)
       .maybeSingle();
-    if (error) return { profile: null, error: error.message, followerCount: 0, followingCount: 0, certs: [] as Cert[], presets: [] as PublicPreset[] };
-    if (!data) return { profile: null, error: null, followerCount: 0, followingCount: 0, certs: [] as Cert[], presets: [] as PublicPreset[] };
-    const [followers, following, userCertsRes, allCertsRes, presetsRes] = await Promise.all([
+    const empty = { profile: null, error: null as string | null, followerCount: 0, followingCount: 0, certs: [] as Cert[], presets: [] as PublicPreset[], screenshots: [] as PublicScreenshot[], isPremium: false };
+    if (error) return { ...empty, error: error.message };
+    if (!data) return empty;
+    const [followers, following, userCertsRes, allCertsRes, presetsRes, screenshotsRes, premiumRes] = await Promise.all([
       s.from("user_follows").select("follower_id", { count: "exact", head: true }).eq("followed_id", data.id),
       s.from("user_follows").select("followed_id", { count: "exact", head: true }).eq("follower_id", data.id),
       // Badges — earned certifications. Both tables are publicly readable
@@ -46,6 +47,14 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
       s.from("user_certifications").select("certification_id, awarded_at").eq("user_id", data.id),
       s.from("certifications").select("id, slug, name, color, icon"),
       s.from("presets").select("id, title, daw, genre, downloads, is_premium").eq("author_id", data.id).order("created_at", { ascending: false }).limit(6),
+      // is_hidden=false filter — RLS already enforces it, but explicit
+      // here too (same belt-and-suspenders convention as getPosts).
+      s.from("screenshots").select("id, image_url, caption, created_at").eq("author_id", data.id).eq("is_hidden", false).order("created_at", { ascending: false }).limit(12),
+      // Gates the full-page background perk — a boolean-only RPC (no raw
+      // tier/expiry exposed) rather than selecting subscription_tier
+      // directly, which has never been safe to expose (see the comment
+      // above on why it's excluded from the main select).
+      s.rpc("has_active_subscription", { _user_id: data.id }),
     ]);
     const certMap = new Map((allCertsRes.data ?? []).map((c) => [c.id, c]));
     const certs = (userCertsRes.data ?? [])
@@ -54,11 +63,15 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
         return c ? { ...c, awarded_at: uc.awarded_at } : null;
       })
       .filter((c): c is NonNullable<typeof c> => !!c);
-    return { profile: data, error: null, followerCount: followers.count ?? 0, followingCount: following.count ?? 0, certs, presets: presetsRes.data ?? [] };
+    return {
+      profile: data, error: null, followerCount: followers.count ?? 0, followingCount: following.count ?? 0,
+      certs, presets: presetsRes.data ?? [], screenshots: screenshotsRes.data ?? [], isPremium: premiumRes.data === true,
+    };
   });
 
 type Cert = { id: string; slug: string; name: string; color: string; icon: string | null; awarded_at?: string };
 type PublicPreset = { id: string; title: string; daw: string; genre: string | null; downloads: number; is_premium: boolean };
+type PublicScreenshot = { id: string; image_url: string; caption: string | null; created_at: string };
 
 export const searchUsernames = createServerFn({ method: "GET" })
   .validator((input: { q: string }) => input)
@@ -122,6 +135,19 @@ export const getPresets = createServerFn({ method: "GET" }).handler(async () => 
     : { data: [] as { id: string; username: string; avatar_url: string | null }[] };
   const map = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
   return { presets: (presetsRes.data ?? []).map((p) => ({ ...p, author: map.get(p.author_id) ?? null })), error: null };
+});
+
+// Merch shop — catalog only (see admin.merch.tsx / shop.tsx). RLS already
+// restricts this SELECT to is_active=true for anon/non-moderators, so no
+// extra filter needed here.
+export const getMerch = createServerFn({ method: "GET" }).handler(async () => {
+  const { data, error } = await pub()
+    .from("merch_items")
+    .select("id, name, description, image_url, price_label, category")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: false });
+  if (error) return { items: [], error: error.message };
+  return { items: data ?? [], error: null };
 });
 
 export const getPosts = createServerFn({ method: "GET" }).handler(async () => {
