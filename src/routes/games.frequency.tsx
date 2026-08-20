@@ -8,9 +8,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  playNoiseWithBoost, FREQ_BANDS, getAudioContext, setMasterVolume,
-  playSuccessChime, playFailCue, startSustainedNoise,
-  type SustainedNoise, type NoiseSource, type SignalOptions,
+  FREQ_BANDS, getAudioContext, setMasterVolume,
+  playSuccessChime, playFailCue, startSustainedMultiBand, playMultiBandPreview,
+  type SustainedMultiBand, type NoiseSource, type SignalOptions, type EqPoint,
 } from "@/lib/audio";
 import { listActiveLoops, decodeLoop, type LoopRow } from "@/lib/games/loops";
 import { SignalVisualizer, type VizMode } from "@/components/signal-visualizer";
@@ -59,13 +59,14 @@ const DIFFICULTY: Record<Difficulty, {
   tier: string;
   tolerancePct: number;   // ± % around target frequency (Hz)
   toleranceOct: number;   // derived octave half-width
+  toleranceDb: number;    // ± dB tolerance for matching a point's gain
   snap: boolean;
-  bandCount: number;
+  points: number;         // simultaneous EQ points to place, EQ-Academy-style
 }> = {
-  easy:   { name: "Легко",  tier: "±25%",  tolerancePct: 25, toleranceOct: Math.log2(1.25),  snap: true,  bandCount: 5  },
-  medium: { name: "Средне", tier: "±15%",  tolerancePct: 15, toleranceOct: Math.log2(1.15),  snap: true,  bandCount: 7  },
-  hard:   { name: "Сложно", tier: "±5%",   tolerancePct: 5,  toleranceOct: Math.log2(1.05),  snap: false, bandCount: 12 },
-  god:    { name: "God",    tier: "±2%",   tolerancePct: 2,  toleranceOct: Math.log2(1.02),  snap: false, bandCount: 12 },
+  easy:   { name: "Легко",  tier: "±25%",  tolerancePct: 25, toleranceOct: Math.log2(1.25),  toleranceDb: 10,  snap: true,  points: 1 },
+  medium: { name: "Средне", tier: "±15%",  tolerancePct: 15, toleranceOct: Math.log2(1.15),  toleranceDb: 6,   snap: true,  points: 2 },
+  hard:   { name: "Сложно", tier: "±5%",   tolerancePct: 5,  toleranceOct: Math.log2(1.05),  toleranceDb: 3,   snap: false, points: 3 },
+  god:    { name: "God",    tier: "±2%",   tolerancePct: 2,  toleranceOct: Math.log2(1.02),  toleranceDb: 1.5, snap: false, points: 3 },
 };
 
 const HARD_TARGETS = [60, 90, 150, 250, 400, 700, 1000, 1800, 3000, 5000, 8000, 12000];
@@ -85,25 +86,33 @@ type EffDifficulty = {
   name: string;
   tolerancePct: number;
   toleranceOct: number;
+  toleranceDb: number;
   snap: boolean;
   boostDb: number;
   q: number;
   targets: number[];
+  points: number; // simultaneous EQ points — 1 at low levels, up to 3 at high
 };
 
 function levelDifficulty(level: number): EffDifficulty {
   const tolerancePct = Math.round(3 + 22 * Math.exp(-(level - 1) / 12));
+  const toleranceDb = Math.round((2 + 6 * Math.exp(-(level - 1) / 12)) * 10) / 10;
   const boostDb = Math.round((4 + 8 * Math.exp(-(level - 1) / 15)) * 10) / 10;
   const q = Math.round((1.5 + Math.min(6.5, (level - 1) * 0.18)) * 10) / 10;
   const targets = level <= 5 ? EASY_TARGETS : level <= 15 ? FREQ_BANDS.map((b) => b.freq) : HARD_TARGETS;
+  // Mirrors EQ Academy's own progression — single-parameter adjustments at
+  // the start, more simultaneous points introduced as levels climb.
+  const points = level <= 5 ? 1 : level <= 15 ? 2 : 3;
   return {
     name: `Уровень ${level}`,
     tolerancePct,
     toleranceOct: Math.log2(1 + tolerancePct / 100),
+    toleranceDb,
     snap: level <= 5,
     boostDb,
     q,
     targets,
+    points,
   };
 }
 
@@ -137,6 +146,75 @@ function accuracyPct(guess: number, target: number, toleranceOct: number) {
   return Math.max(0, Math.min(100, Math.round((1 - err / toleranceOct) * 100)));
 }
 
+function gainAccuracyPct(guess: number, target: number, toleranceDb: number) {
+  const err = Math.abs(guess - target);
+  return Math.max(0, Math.min(100, Math.round((1 - err / toleranceDb) * 100)));
+}
+
+// Random target EQ points for a round — EQ-Academy-style multi-band
+// matching. Picks `n` distinct frequencies from the difficulty's target
+// pool, spaced at least ~0.6 octaves apart so the bumps stay visually and
+// audibly distinguishable, each with its own randomized gain within the
+// round's boost ceiling (never all the same height — otherwise only
+// frequency would ever be tested, not gain).
+function makeTargetBands(n: number, pool: number[], maxGainDb: number): EqPoint[] {
+  const MIN_OCT_GAP = 0.6;
+  const chosen: number[] = [];
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  for (const f of shuffled) {
+    if (chosen.length >= n) break;
+    const farEnough = chosen.every((c) => Math.abs(Math.log2(f / c)) >= MIN_OCT_GAP);
+    if (farEnough) chosen.push(f);
+  }
+  // Pool too small / too clustered to fill n distinct well-spaced picks —
+  // top up with whatever's left rather than shipping fewer points than
+  // the difficulty calls for.
+  for (const f of shuffled) {
+    if (chosen.length >= n) break;
+    if (!chosen.includes(f)) chosen.push(f);
+  }
+  return chosen
+    .sort((a, b) => a - b)
+    .map((freq) => ({ freq, gainDb: Math.round(randRange(maxGainDb * 0.5, maxGainDb) * 10) / 10 }));
+}
+
+function randRange(min: number, max: number) {
+  return min + Math.random() * (max - min);
+}
+
+// Evenly-spread, low-gain starting points for the player's own curve —
+// distinct default positions (not all stacked at 1kHz) so there's
+// something visible to grab and drag from turn one.
+function defaultGuessBands(n: number): EqPoint[] {
+  const starts = [200, 1200, 6000];
+  return Array.from({ length: n }, (_, i) => ({ freq: starts[i] ?? 1000 * (i + 1), gainDb: 3 }));
+}
+
+// Pairs guess points to target points by sorted frequency rank (simplest,
+// matches how a player naturally thinks about "my leftmost dot vs the
+// leftmost bump I heard") and averages freq+gain accuracy per pair.
+function scoreBands(guessBands: EqPoint[], targetBands: EqPoint[], diff: EffDifficulty) {
+  const gs = [...guessBands].sort((a, b) => a.freq - b.freq);
+  const ts = [...targetBands].sort((a, b) => a.freq - b.freq);
+  let sum = 0;
+  let allWithinTolerance = true;
+  let worstAcc = 101;
+  let worstFreq = ts[0]?.freq ?? 1000;
+  for (let i = 0; i < ts.length; i++) {
+    const g = gs[i] ?? gs[gs.length - 1];
+    const t = ts[i];
+    const freqAcc = accuracyPct(g.freq, t.freq, diff.toleranceOct);
+    const gainAcc = gainAccuracyPct(g.gainDb, t.gainDb, diff.toleranceDb);
+    const bandAcc = (freqAcc + gainAcc) / 2;
+    sum += bandAcc;
+    if (bandAcc < worstAcc) { worstAcc = bandAcc; worstFreq = t.freq; }
+    if (Math.abs(Math.log2(g.freq / t.freq)) > diff.toleranceOct || Math.abs(g.gainDb - t.gainDb) > diff.toleranceDb) {
+      allWithinTolerance = false;
+    }
+  }
+  return { accuracy: Math.round(sum / ts.length), correct: allWithinTolerance, worstFreq };
+}
+
 function FrequencyGame() {
   const { session } = useAuth();
   const search = Route.useSearch();
@@ -144,12 +222,12 @@ function FrequencyGame() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mode, setMode] = useState<Mode | null>(null);
-  const [target, setTarget] = useState<number | null>(null);
+  const [targetBands, setTargetBands] = useState<EqPoint[] | null>(null);
   const [round, setRound] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [accSum, setAccSum] = useState(0);
   const [streak, setStreak] = useState(0);
-  const [guess, setGuess] = useState<number>(1000); // continuous
+  const [guessBands, setGuessBands] = useState<EqPoint[]>(defaultGuessBands(1));
   const [answered, setAnswered] = useState<null | { correct: boolean; accuracy: number; tip: FrequencyTip }>(null);
   const [finished, setFinished] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -194,10 +272,12 @@ function FrequencyGame() {
       name: d.name,
       tolerancePct: d.tolerancePct,
       toleranceOct: d.toleranceOct,
+      toleranceDb: d.toleranceDb,
       snap: d.snap,
       boostDb: settings.boostDb,
       q: settings.q,
       targets: settings.difficulty === "easy" ? EASY_TARGETS : settings.difficulty === "medium" ? FREQ_BANDS.map((b) => b.freq) : HARD_TARGETS,
+      points: d.points,
     };
   }, [mode, progress.level, settings.difficulty, settings.boostDb, settings.q]);
   const rounds = settings.rounds;
@@ -237,7 +317,7 @@ function FrequencyGame() {
     if (typeof window !== "undefined") window.localStorage.setItem(VOLUME_KEY, String(volume));
   }, [volume]);
 
-  const noiseRef = useRef<SustainedNoise | null>(null);
+  const noiseRef = useRef<SustainedMultiBand | null>(null);
 
   function stopSustained() {
     if (noiseRef.current) {
@@ -306,24 +386,53 @@ function FrequencyGame() {
     [settings.source, diff.q, settings.phone, loopBuffer],
   );
 
-  /** Start looped playback held for as long as the user keeps input. */
-  function startHold(freq: number | null, boosted: boolean) {
-    if (freq === null || answered !== null) return;
+  // Whether the ▶-toggled loop was on right before a target-reference hold
+  // started, so releasing the hold can resume it — a ref (not state) since
+  // it only needs to survive the duration of one hold gesture.
+  const wasLoopingRef = useRef(false);
+
+  /** ▶ button — toggles a sustained loop of the player's OWN current
+   * guess points ("hear what I've set"). Dragging a point while this is on
+   * updates the loop live (see handleGuessChange). */
+  function toggleMyLoop() {
+    if (answered !== null) return;
     getAudioContext();
+    if (playing) {
+      stopSustained();
+      return;
+    }
     stopSustained();
-    noiseRef.current = startSustainedNoise(freq, diff.boostDb, boosted, signalOpts);
+    noiseRef.current = startSustainedMultiBand(guessBands, signalOpts);
     setPlaying(true);
-    setCompare(!boosted);
   }
 
-  /** Short one-shot preview (used by ▶ button). */
-  function playPreview(freq: number | null) {
-    if (freq === null) return;
+  /** Hold-to-preview the TARGET reference curve (RMB on the chart, or the
+   * dedicated hold-button for touch/no-right-click). Releasing resumes the
+   * player's own loop if it was playing before the hold started. */
+  function holdTarget() {
+    if (!targetBands || answered !== null) return;
     getAudioContext();
-    stopSustained();
-    setPlaying(true);
-    playNoiseWithBoost(freq, 1.6, diff.boostDb, signalOpts);
-    window.setTimeout(() => setPlaying(false), 1600);
+    wasLoopingRef.current = playing;
+    if (noiseRef.current) { noiseRef.current.stop(); noiseRef.current = null; }
+    noiseRef.current = startSustainedMultiBand(targetBands, signalOpts);
+    setCompare(true);
+  }
+  function holdTargetEnd() {
+    if (noiseRef.current) { noiseRef.current.stop(); noiseRef.current = null; }
+    setCompare(false);
+    if (wasLoopingRef.current) {
+      noiseRef.current = startSustainedMultiBand(guessBands, signalOpts);
+      setPlaying(true);
+    } else {
+      setPlaying(false);
+    }
+  }
+
+  /** Called on every point drag update — keeps state and (if the loop is
+   * currently playing) the live audio in sync in one place. */
+  function handleGuessChange(next: EqPoint[]) {
+    setGuessBands(next);
+    if (playing && !compare) noiseRef.current?.setPoints(next);
   }
 
   // Cleanup on unmount
@@ -334,12 +443,10 @@ function FrequencyGame() {
   }
 
   function newRound() {
-    const targets = targetsForDifficulty();
-    const t = targets[Math.floor(Math.random() * targets.length)];
-    setTarget(t);
+    setTargetBands(makeTargetBands(diff.points, diff.targets, diff.boostDb));
     setAnswered(null);
     setCompare(false);
-    setGuess(1000);
+    setGuessBands(defaultGuessBands(diff.points));
     // Don't auto-play — user starts the signal with the ▶ button.
   }
 
@@ -360,19 +467,22 @@ function FrequencyGame() {
     setMode(null);
     setRound(0);
     setFinished(false);
-    setTarget(null);
+    setTargetBands(null);
     setAnswered(null);
   }
 
   async function submit() {
-    if (target === null || answered !== null) return;
-    const finalGuess = diff.snap ? snapToNearest(guess, targetsForDifficulty()) : guess;
-    const acc = accuracyPct(finalGuess, target, diff.toleranceOct);
-    const isCorrect = acc > 0 && Math.abs(Math.log2(finalGuess / target)) <= diff.toleranceOct;
+    if (targetBands === null || answered !== null) return;
+    // Snap only applies at low levels/easy tier and only to frequency —
+    // gain is never snapped, it's always freely placed.
+    const finalGuess = diff.snap
+      ? guessBands.map((g) => ({ ...g, freq: snapToNearest(g.freq, targetsForDifficulty()) }))
+      : guessBands;
+    const { accuracy: acc, correct: isCorrect, worstFreq } = scoreBands(finalGuess, targetBands, diff);
     const perfection = isCorrect && acc >= PERFECTION_THRESHOLD;
-    const tip = tipFor(target);
+    const tip = tipFor(worstFreq);
     setAnswered({ correct: isCorrect, accuracy: acc, tip });
-    setGuess(finalGuess);
+    setGuessBands(finalGuess);
     const bonus = perfection ? PERFECTION_BONUS : 0;
     const nextCorrect = correct + (isCorrect ? 1 : 0);
     const nextStreak = isCorrect ? streak + 1 : 0;
@@ -616,8 +726,8 @@ function FrequencyGame() {
           <PlayScreen
             round={round}
             rounds={rounds}
-            target={target}
-            guess={guess}
+            targetBands={targetBands}
+            guessBands={guessBands}
             answered={answered}
             playing={playing}
             compare={compare}
@@ -626,11 +736,11 @@ function FrequencyGame() {
             viz={viz}
             onVizChange={setViz}
             allowedTargets={targetsForDifficulty()}
-            onGuess={(f) => answered === null && setGuess(f)}
+            onGuessChange={(bands) => answered === null && handleGuessChange(bands)}
             onSubmit={submit}
-            onReplay={() => playPreview(target)}
-            onHoldStart={(boosted) => startHold(target, boosted)}
-            onHoldEnd={() => stopSustained()}
+            onReplay={toggleMyLoop}
+            onHoldStart={holdTarget}
+            onHoldEnd={holdTargetEnd}
             onExit={() => { stopSustained(); exit(); }}
           />
         )}
@@ -762,17 +872,18 @@ function Lobby({
 }
 
 function PlayScreen({
-  round, rounds, target, guess, answered, playing, compare, mode, diff, viz, onVizChange, allowedTargets,
-  onGuess, onSubmit, onReplay, onHoldStart, onHoldEnd, onExit,
+  round, rounds, targetBands, guessBands, answered, playing, compare, mode, diff, viz, onVizChange, allowedTargets,
+  onGuessChange, onSubmit, onReplay, onHoldStart, onHoldEnd, onExit,
 }: {
-  round: number; rounds: number; target: number | null; guess: number;
+  round: number; rounds: number; targetBands: EqPoint[] | null; guessBands: EqPoint[];
   answered: null | { correct: boolean; accuracy: number; tip: FrequencyTip };
   playing: boolean; compare: boolean; mode: Mode; diff: EffDifficulty;
   viz: VizMode; onVizChange: (v: VizMode) => void;
   allowedTargets: number[];
-  onGuess: (f: number) => void; onSubmit: () => void; onReplay: () => void;
-  onHoldStart: (boosted: boolean) => void; onHoldEnd: () => void; onExit: () => void;
+  onGuessChange: (bands: EqPoint[]) => void; onSubmit: () => void; onReplay: () => void;
+  onHoldStart: () => void; onHoldEnd: () => void; onExit: () => void;
 }) {
+  const n = guessBands.length;
   return (
     <div className="mt-6 rounded-2xl border bg-black/40 p-6 backdrop-blur md:p-8" style={{ borderColor: "var(--fq-border)" }}>
       <div className="flex items-center justify-between">
@@ -786,10 +897,12 @@ function PlayScreen({
 
       <div className="mt-3 flex items-center justify-between gap-4">
         <div className="text-lg font-bold text-white md:text-xl">
-          Какая частота <span style={{ color: "var(--fq-acc)" }}>поднята</span> в этом звуке?
+          {n === 1
+            ? <>Подбери <span style={{ color: "var(--fq-acc)" }}>поднятую</span> частоту на слух</>
+            : <>Расставь <span style={{ color: "var(--fq-acc)" }}>{n} точки</span> эквалайзера так же, как в эталоне</>}
         </div>
         <div className="hidden font-mono text-[11px] uppercase tracking-widest md:block" style={{ color: "var(--fq-muted)" }}>
-          зажми <b style={{ color: "var(--fq-acc)" }}>ПКМ</b> на графике — играет пока держишь
+          зажми <b style={{ color: "var(--fq-acc)" }}>ПКМ</b> на графике — эталон, пока держишь
         </div>
       </div>
 
@@ -799,20 +912,20 @@ function PlayScreen({
           Academy). */}
       <div className="mt-4 flex items-center justify-end">
         <span className="hidden font-mono text-[10px] uppercase tracking-widest md:inline" style={{ color: playing || compare ? "var(--fq-acc)" : "var(--fq-muted)" }}>
-          {compare ? "A · оригинал" : playing ? "Б · с бустом" : "тишина"}
+          {compare ? "эталон" : playing ? "моя кривая" : "тишина"}
         </span>
       </div>
 
       {/* EQ chart with overlaid visualizer */}
       <div className="mt-3">
         <EqChart
-          target={target}
-          guess={guess}
+          targetBands={targetBands}
+          guessBands={guessBands}
           answered={answered}
           compare={compare}
           playing={playing}
           viz={viz}
-          onGuess={onGuess}
+          onGuessChange={onGuessChange}
           onHoldStart={onHoldStart}
           onHoldEnd={onHoldEnd}
           snapPoints={diff.snap ? allowedTargets : null}
@@ -826,21 +939,21 @@ function PlayScreen({
             type="button" onClick={onReplay} disabled={answered !== null}
             className="grid h-14 w-14 place-items-center rounded-full transition-all disabled:opacity-40"
             style={{
-              background: "transparent",
+              background: playing ? "var(--fq-acc)" : "transparent",
               border: "2px solid var(--fq-acc)",
-              color: "var(--fq-acc)",
+              color: playing ? "var(--fq-acc-ink)" : "var(--fq-acc)",
               boxShadow: playing ? "var(--fq-acc-glow)" : "none",
             }}
-            aria-label="Play"
+            aria-label={playing ? "Стоп" : "Слушать мою кривую"}
           >
             <Play className="h-5 w-5" fill="currentColor" />
           </button>
           <button
             type="button"
-            onMouseDown={(e) => { if (e.button === 0) onHoldStart(false); }}
+            onMouseDown={(e) => { if (e.button === 0) onHoldStart(); }}
             onMouseUp={onHoldEnd}
             onMouseLeave={onHoldEnd}
-            onTouchStart={() => onHoldStart(false)}
+            onTouchStart={() => onHoldStart()}
             onTouchEnd={onHoldEnd}
             disabled={answered !== null}
             className="rounded-2xl border px-6 py-3 text-sm font-bold uppercase tracking-widest transition-all disabled:opacity-40"
@@ -850,11 +963,11 @@ function PlayScreen({
                 : { borderColor: "var(--fq-border)", background: "var(--fq-panel)", color: "var(--fq-text)" }
             }
           >
-            A / Б <span className="ml-2 font-normal normal-case tracking-normal opacity-70">удерживай — оригинал</span>
+            Эталон <span className="ml-2 font-normal normal-case tracking-normal opacity-70">удерживай, чтобы слушать</span>
           </button>
         </div>
         <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: "var(--fq-muted)" }}>
-          {compare ? "Играет оригинал (без буста)" : playing ? "Слушай — идёт сигнал" : answered ? " " : "▶ короткий превью · ПКМ по графику — держать сигнал"}
+          {compare ? "Играет эталон" : playing ? "Играет моя кривая — двигай точки" : answered ? " " : "▶ — слушать мою кривую · ПКМ по графику — эталон"}
         </div>
       </div>
 
@@ -877,7 +990,7 @@ function PlayScreen({
                 {answered.correct ? "Верно!" : "Мимо"}
               </div>
               <div className="font-mono text-xs" style={{ color: "var(--fq-muted)" }}>
-                Цель: {formatHz(target ?? 0)} · Точность: {answered.accuracy}%
+                Эталон: {(targetBands ?? []).slice().sort((a, b) => a.freq - b.freq).map((b) => formatHz(b.freq)).join(" · ")} · Точность: {answered.accuracy}%
               </div>
             </div>
             <div className="hidden font-mono text-2xl font-black md:block" style={{ color: answered.correct ? "var(--fq-acc)" : "var(--fq-danger)" }}>
@@ -902,7 +1015,7 @@ function PlayScreen({
             className="rounded-full px-10 py-3 font-bold transition-all"
             style={{ background: "var(--fq-acc)", color: "var(--fq-acc-ink)", boxShadow: "var(--fq-acc-glow)" }}
           >
-            Ответить · {formatHz(diff.snap ? snapToNearest(guess, allowedTargets) : guess)}
+            Ответить{n === 1 ? ` · ${formatHz(diff.snap ? snapToNearest(guessBands[0].freq, allowedTargets) : guessBands[0].freq)}` : ""}
           </button>
         </div>
       )}
@@ -912,69 +1025,42 @@ function PlayScreen({
 
 /* ------------- EQ Chart ------------- */
 
+// Peak width of every EQ point's contribution to the composite curve, in
+// octaves — shared by both target and guess so overlapping points visually
+// interact the same way on both curves.
+const BELL_Q = 0.35;
+const bellGaussAt = (f: number, center: number) => {
+  const octDist = Math.log2(f / center);
+  return Math.exp(-(octDist * octDist) / (2 * BELL_Q * BELL_Q));
+};
+/** Sum of every point's contribution at frequency f — an approximation of
+ * a multi-band peaking EQ's composite response, good enough for a chart
+ * (not a precision plugin: overlapping peaking filters don't sum exactly
+ * like this in dB, but it reads correctly and matches what the ear hears
+ * when bands are the ~0.6-octave-apart minimum this game enforces). */
+const curveDbAt = (f: number, bands: EqPoint[]) =>
+  bands.reduce((sum, b) => sum + b.gainDb * bellGaussAt(f, b.freq), 0);
+
 function EqChart({
-  target, guess, answered, compare, playing, viz, onGuess, onHoldStart, onHoldEnd, snapPoints,
+  targetBands, guessBands, answered, compare, playing, viz, onGuessChange, onHoldStart, onHoldEnd, snapPoints,
 }: {
-  target: number | null; guess: number;
+  targetBands: EqPoint[] | null; guessBands: EqPoint[];
   answered: null | { correct: boolean; accuracy: number; tip: FrequencyTip };
   compare: boolean;
   playing: boolean;
   viz: VizMode;
-  onGuess: (f: number) => void;
-  onHoldStart: (boosted: boolean) => void;
+  onGuessChange: (bands: EqPoint[]) => void;
+  onHoldStart: () => void;
   onHoldEnd: () => void;
   snapPoints: number[] | null;
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const draggingRef = useRef(false);
+  const draggingIdxRef = useRef<number | null>(null);
   const rmbRef = useRef(false);
 
-  const setFromClientX = useCallback((clientX: number) => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
-    onGuess(pctToFreq(pct));
-  }, [onGuess]);
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (answered) return;
-    if (e.button === 2) {
-      rmbRef.current = true;
-      draggingRef.current = true;
-      (e.target as Element).setPointerCapture?.(e.pointerId);
-      onHoldStart(true); // hold RMB → sustained boosted signal (A/B target)
-      setFromClientX(e.clientX); // allow sweeping the marker while listening
-      e.preventDefault();
-      return;
-    }
-    draggingRef.current = true;
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    setFromClientX(e.clientX);
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    // Live-tracks on plain hover too, not just while a button is held —
-    // this is what actually makes the curve feel "live": move the cursor
-    // across the chart and the bell follows continuously, no click-drag
-    // required. (Previously gated on draggingRef, so the curve only ever
-    // moved during an active drag and looked frozen otherwise.)
-    if (!answered) setFromClientX(e.clientX);
-  };
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (rmbRef.current) { rmbRef.current = false; onHoldEnd(); }
-    draggingRef.current = false;
-    (e.target as Element).releasePointerCapture?.(e.pointerId);
-  };
-
-
-  // For rendering: the marker position — snapped visually only after answer
-  const displayFreq = answered && snapPoints ? snapToNearest(guess, snapPoints) : guess;
-  const markerPct = freqToPct(displayFreq);
-  const targetPct = target !== null ? freqToPct(target) : 50;
-
   // Shared dB→y mapping, used by the grid lines, the flat 0 dB line, the
-  // curve, and the handle's height alike (single source of truth — a
-  // previous version had the curve and the grid computing this
+  // curve, and every point handle's height alike (single source of truth —
+  // a previous version had the curve and the grid computing this
   // independently, which drifted out of sync by a few px). This game only
   // ever boosts (never cuts), so the scale is deliberately asymmetric —
   // most of the chart's height goes to the 0..+24 dB region that's
@@ -982,44 +1068,93 @@ function EqChart({
   // negative half like a real console EQ display would.
   const ZERO_Y = 230; // y-coordinate of the 0 dB line, in the 1000×320 viewBox
   const PX_PER_DB = 8.75;
+  const GAIN_MAX = 24; // drag ceiling, matches the top gridline
   const dbToY = useCallback((db: number) => ZERO_Y - db * PX_PER_DB, []);
+  const yToDb = useCallback((y: number) => (ZERO_Y - y) / PX_PER_DB, []);
 
-  // Bell shape shared by both the curve path and the handle's own height —
-  // same "single point, live curve" idea as the reference's draggable EQ
-  // points, just with one point instead of three (this game guesses one
-  // frequency, not a 3-band shape). Live-tracks the guess while unanswered
-  // (move the cursor, the curve follows in real time); once answered it
-  // re-centers on the true target to reveal it, same as before.
-  const PEAK_DB = 16; // cosmetic peak height — not tied 1:1 to diff.boostDb
-  const BELL_Q = 0.35; // width of the bell in octaves
-  const bellGaussAt = useCallback((f: number, center: number) => {
-    const octDist = Math.log2(f / center);
-    return Math.exp(-(octDist * octDist) / (2 * BELL_Q * BELL_Q));
-  }, []);
-  const curveCenter = answered ? target : displayFreq;
-  const bellPath = useMemo(() => {
-    if (curveCenter === null) return "";
-    const width = 1000;
+  const nearestGuessIdx = useCallback((clientX: number) => {
+    const el = wrapRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    const freq = pctToFreq(pct);
+    let best = 0, bestD = Infinity;
+    guessBands.forEach((b, i) => {
+      const d = Math.abs(Math.log2(b.freq / freq));
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
+  }, [guessBands]);
+
+  const dragPointTo = useCallback((idx: number, clientX: number, clientY: number) => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const xPct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    const yPct = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
+    const freq = pctToFreq(xPct);
+    const gainDb = Math.max(0, Math.min(GAIN_MAX, yToDb((yPct / 100) * 320)));
+    onGuessChange(guessBands.map((b, i) => (i === idx ? { freq, gainDb } : b)));
+  }, [guessBands, onGuessChange, yToDb]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (answered) return;
+    if (e.button === 2) {
+      rmbRef.current = true;
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      onHoldStart(); // hold RMB → sustained target reference for A/B
+      e.preventDefault();
+      return;
+    }
+    const idx = nearestGuessIdx(e.clientX);
+    draggingIdxRef.current = idx;
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    dragPointTo(idx, e.clientX, e.clientY);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (answered) return;
+    const idx = draggingIdxRef.current;
+    if (idx !== null) dragPointTo(idx, e.clientX, e.clientY);
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (rmbRef.current) { rmbRef.current = false; onHoldEnd(); }
+    draggingIdxRef.current = null;
+    (e.target as Element).releasePointerCapture?.(e.pointerId);
+  };
+
+  // For rendering: guess positions — snapped visually only after answer
+  const displayGuess = answered && snapPoints
+    ? guessBands.map((b) => ({ ...b, freq: snapToNearest(b.freq, snapPoints) }))
+    : guessBands;
+
+  const guessPath = useMemo(() => {
     const pts: string[] = [];
     for (let i = 0; i <= 200; i++) {
       const pct = (i / 200) * 100;
       const f = pctToFreq(pct);
-      const gauss = bellGaussAt(f, curveCenter);
-      const x = (pct / 100) * width;
-      const y = dbToY(gauss * PEAK_DB);
+      const x = (pct / 100) * 1000;
+      const y = dbToY(curveDbAt(f, displayGuess));
       pts.push(`${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`);
     }
     return pts.join(" ");
-  }, [curveCenter, bellGaussAt, dbToY]);
-  // Where the draggable handle sits vertically — on the curve itself, not
-  // a fixed height, so after answering a near-miss guess visibly rests
-  // partway up the true curve's slope instead of always at the peak.
-  const markerTopPct = curveCenter === null
-    ? (ZERO_Y / 320) * 100
-    : (dbToY(bellGaussAt(displayFreq, curveCenter) * PEAK_DB) / 320) * 100;
+  }, [displayGuess, dbToY]);
+
+  const targetPath = useMemo(() => {
+    if (!answered || !targetBands) return "";
+    const pts: string[] = [];
+    for (let i = 0; i <= 200; i++) {
+      const pct = (i / 200) * 100;
+      const f = pctToFreq(pct);
+      const x = (pct / 100) * 1000;
+      const y = dbToY(curveDbAt(f, targetBands));
+      pts.push(`${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`);
+    }
+    return pts.join(" ");
+  }, [answered, targetBands, dbToY]);
 
   const ticks = [20, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000];
   const dbLines = [-6, 0, 4, 12, 24];
+  const single = guessBands.length === 1;
 
   return (
     <div
@@ -1035,7 +1170,7 @@ function EqChart({
         borderRadius: "18px",
         border: "1px solid var(--fq-border)",
         background: "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.35))",
-        cursor: answered ? "default" : "ew-resize",
+        cursor: answered ? "default" : "grab",
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -1072,26 +1207,30 @@ function EqChart({
         })}
 
         {/* Flat 0 dB line (accent) — recedes once there's a live curve on top of it */}
-        <line x1={0} x2={1000} y1={ZERO_Y} y2={ZERO_Y} stroke="var(--fq-acc)" strokeWidth="2" opacity={curveCenter !== null ? 0.35 : 0.9} />
+        <line x1={0} x2={1000} y1={ZERO_Y} y2={ZERO_Y} stroke="var(--fq-acc)" strokeWidth="2" opacity={0.35} />
 
-        {/* Live EQ curve — always visible and centered on the guess while
-            unanswered (move the cursor, the curve follows), re-centered on
-            the true target once answered to reveal it. Orange while
-            editing (matches the handle = "this is your guess"), accent
-            color once revealed = "this is the truth". */}
-        {curveCenter !== null && (
-          <>
-            <path d={`${bellPath} L1000,${ZERO_Y} L0,${ZERO_Y} Z`} fill={answered ? "var(--fq-acc)" : "#ff8a3d"} opacity="0.15" />
-            <path d={bellPath} stroke={answered ? "var(--fq-acc)" : "#ff8a3d"} strokeWidth="2.5" fill="none"
-              style={{ filter: `drop-shadow(0 0 8px ${answered ? "var(--fq-acc)" : "#ff8a3d"})` }} />
-          </>
+        {/* Target curve — revealed only after answering, for comparison */}
+        {answered && targetBands && (
+          <path d={targetPath} stroke="var(--fq-acc)" strokeWidth="2.5" fill="none"
+            style={{ filter: "drop-shadow(0 0 8px var(--fq-acc))" }} />
         )}
 
-        {/* Target marker (visible only after answer) */}
-        {answered && target !== null && (
-          <line x1={(targetPct / 100) * 1000} x2={(targetPct / 100) * 1000} y1={30} y2={290}
-            stroke="var(--fq-acc)" strokeWidth="1" strokeDasharray="4 4" opacity="0.7" />
-        )}
+        {/* My curve — always visible and live: drag a point, the curve
+            follows in real time. Orange while editing ("this is my
+            guess"); once answered it's kept visible alongside the
+            revealed target curve above, for a direct A/B on the shapes. */}
+        <path d={`${guessPath} L1000,${ZERO_Y} L0,${ZERO_Y} Z`} fill={answered ? "var(--fq-acc)" : "#ff8a3d"} opacity="0.15" />
+        <path d={guessPath} stroke={answered ? "rgba(255,138,61,0.65)" : "#ff8a3d"} strokeWidth="2.5" fill="none"
+          style={{ filter: answered ? "none" : "drop-shadow(0 0 8px #ff8a3d)" }} />
+
+        {/* Target point markers + guide lines (visible only after answer) */}
+        {answered && targetBands && targetBands.map((b, i) => (
+          <g key={`t${i}`}>
+            <line x1={(freqToPct(b.freq) / 100) * 1000} x2={(freqToPct(b.freq) / 100) * 1000} y1={30} y2={290}
+              stroke="var(--fq-acc)" strokeWidth="1" strokeDasharray="4 4" opacity="0.5" />
+            <circle cx={(freqToPct(b.freq) / 100) * 1000} cy={dbToY(b.gainDb)} r="5" fill="var(--fq-acc)" opacity="0.9" />
+          </g>
+        ))}
       </svg>
 
       {/* Live signal overlay — sits ON the graph, not below.
@@ -1104,58 +1243,60 @@ function EqChart({
           active={playing || compare}
           mode={answered ? viz : (viz === "spectrum" || viz === "spectrogram" ? "wave" : viz)}
           transparent
-          highlightHz={answered ? target : null}
+          highlightHz={answered && single ? targetBands?.[0]?.freq ?? null : null}
           height={"100%" as unknown as number}
         />
       </div>
 
-      {/* Guess marker — thin dashed guide line + a circular handle sitting
-          on the flat 0 dB line, echoing the reference's draggable EQ
-          control points. This game only guesses frequency (not gain), so
-          the handle rides the live curve's own height (markerTopPct) —
-          while dragging it sits exactly on the curve's peak (the curve is
-          centered on the guess), and after answering a near-miss guess
-          visibly rests partway down the true curve's slope. */}
-      <div
-        className="pointer-events-none absolute top-3 bottom-8"
-        style={{
-          left: `${markerPct}%`,
-          transition: answered ? "left 260ms cubic-bezier(.2,.7,.2,1)" : "none",
-        }}
-      >
-        <div
-          className="absolute inset-y-0"
-          style={{ left: 0, width: "1.5px", background: "repeating-linear-gradient(to bottom, rgba(255,138,61,0.55) 0 4px, transparent 4px 8px)" }}
-        />
-        <div
-          className="absolute rounded-full"
-          style={{
-            left: "-8px",
-            top: `calc(${markerTopPct}% - 8px)`,
-            width: "16px",
-            height: "16px",
-            background: "#ff8a3d",
-            border: "2px solid rgba(10,10,14,0.6)",
-            boxShadow: "0 0 14px rgba(255,138,61,0.6)",
-            transition: answered ? "top 260ms cubic-bezier(.2,.7,.2,1)" : "none",
-          }}
-        />
-        {answered && (
+      {/* Guess point handles — draggable in both axes (frequency = x,
+          gain = y), echoing the reference's draggable EQ control points.
+          Grab the nearest one and drag; the composite curve above follows
+          in real time. */}
+      {displayGuess.map((b, i) => {
+        const leftPct = freqToPct(b.freq);
+        const topPct = (dbToY(b.gainDb) / 320) * 100;
+        const isTarget = answered !== null;
+        return (
           <div
-            className="absolute whitespace-nowrap rounded-md px-2 py-0.5 font-mono text-[11px] font-bold"
-            style={{
-              left: "50%",
-              top: `calc(${markerTopPct}% - 34px)`,
-              transform: "translateX(-50%)",
-              background: answered.correct ? "var(--fq-acc)" : "var(--fq-danger)",
-              color: answered.correct ? "var(--fq-acc-ink)" : "#000",
-              transition: "top 260ms cubic-bezier(.2,.7,.2,1)",
-            }}
+            key={i}
+            className="pointer-events-none absolute top-3 bottom-8"
+            style={{ left: `${leftPct}%`, transition: isTarget ? "left 260ms cubic-bezier(.2,.7,.2,1)" : "none" }}
           >
-            {formatHz(target ?? 0)} {answered.correct ? "✓" : "✗"}
+            <div
+              className="absolute inset-y-0"
+              style={{ left: 0, width: "1.5px", background: "repeating-linear-gradient(to bottom, rgba(255,138,61,0.4) 0 4px, transparent 4px 8px)" }}
+            />
+            <div
+              className="absolute rounded-full"
+              style={{
+                left: "-8px",
+                top: `calc(${topPct}% - 8px)`,
+                width: "16px",
+                height: "16px",
+                background: "#ff8a3d",
+                border: "2px solid rgba(10,10,14,0.6)",
+                boxShadow: "0 0 14px rgba(255,138,61,0.6)",
+                transition: isTarget ? "top 260ms cubic-bezier(.2,.7,.2,1)" : "none",
+              }}
+            />
+            {answered && (
+              <div
+                className="absolute whitespace-nowrap rounded-md px-2 py-0.5 font-mono text-[11px] font-bold"
+                style={{
+                  left: "50%",
+                  top: `calc(${topPct}% - 34px)`,
+                  transform: "translateX(-50%)",
+                  background: answered.correct ? "var(--fq-acc)" : "var(--fq-danger)",
+                  color: answered.correct ? "var(--fq-acc-ink)" : "#000",
+                  transition: "top 260ms cubic-bezier(.2,.7,.2,1)",
+                }}
+              >
+                {formatHz(b.freq)}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        );
+      })}
 
       {/* Snap ticks (visible while scrubbing on easy/medium) */}
       {snapPoints && !answered && (
@@ -1170,10 +1311,10 @@ function EqChart({
 
       {/* Bottom hint */}
       <div className="pointer-events-none absolute bottom-1 left-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--fq-muted)" }}>
-        {answered ? " " : "Веди курсором по графику · ПКМ — держать сигнал"}
+        {answered ? " " : single ? "Тяни точку по графику · ПКМ — эталон" : "Тяни точки эквалайзера · ПКМ — эталон"}
       </div>
       <div className="pointer-events-none absolute bottom-1 right-3 font-mono text-[10px] font-bold" style={{ color: "var(--fq-acc)" }}>
-        {playing ? "▲ Б · с бустом" : compare ? "◇ A · оригинал" : "тишина"}
+        {playing ? "▲ моя кривая" : compare ? "◇ эталон" : "тишина"}
       </div>
     </div>
   );

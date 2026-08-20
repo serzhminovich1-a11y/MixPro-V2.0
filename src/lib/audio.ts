@@ -268,6 +268,139 @@ export function startSustainedNoise(
 }
 export type SustainedNoise = ReturnType<typeof startSustainedNoise>;
 
+/** One independently-tunable peaking-EQ point (frequency-trainer multi-band
+ * matching mode — the EQ Academy-style "drag N points to match a hidden
+ * curve" mechanic). */
+export type EqPoint = { freq: number; gainDb: number };
+
+function buildPeakingChain(ac: AudioContext, points: EqPoint[], q: number) {
+  const filters = points.map((p) => {
+    const f = ac.createBiquadFilter();
+    f.type = "peaking";
+    f.frequency.value = p.freq;
+    f.Q.value = q;
+    f.gain.value = p.gainDb;
+    return f;
+  });
+  for (let i = 0; i < filters.length - 1; i++) filters[i].connect(filters[i + 1]);
+  const head: AudioNode = filters[0] ?? ac.createGain();
+  const tail: AudioNode = filters[filters.length - 1] ?? head;
+  return { filters, head, tail };
+}
+
+/**
+ * Start a looped signal shaped by N serial peaking filters, one per point.
+ * Unlike startSustainedNoise (a single fixed band), setPoints() can retune
+ * every band's frequency AND gain continuously — this is what makes
+ * dragging a point feel live: call it on every pointermove and the loop
+ * already playing updates in real time.
+ */
+export function startSustainedMultiBand(points: EqPoint[], opts: SignalOptions = {}) {
+  const ac = getAudioContext();
+  const source: NoiseSource = opts.source ?? "pink";
+  const q = opts.q ?? 2.5;
+
+  const { filters, head, tail } = buildPeakingChain(ac, points, q);
+
+  const out = ac.createGain();
+  out.gain.value = 0;
+
+  let stopSource: (t: number) => void;
+  if (source === "loop" && opts.loopBuffer) {
+    const src = ac.createBufferSource();
+    src.buffer = opts.loopBuffer;
+    src.loop = true;
+    src.connect(head);
+    src.start(ac.currentTime);
+    stopSource = (t) => { try { src.stop(t); } catch { /* */ } };
+  } else if (source === "music") {
+    const pad = buildMusicPad(ac);
+    pad.node.connect(head);
+    pad.start(ac.currentTime);
+    stopSource = (t) => pad.stop(t);
+  } else {
+    const noiseKind: NoiseSource = source === "loop" ? "pink" : source;
+    const src = buildNoiseSource(ac, noiseKind, 2);
+    src.connect(head);
+    src.start(ac.currentTime);
+    stopSource = (t) => { try { src.stop(t); } catch { /* */ } };
+  }
+
+  if (opts.phone) {
+    const ph = buildPhoneFilters(ac);
+    tail.connect(ph.input);
+    ph.output.connect(out);
+  } else {
+    tail.connect(out);
+  }
+  out.connect(getAnalyser());
+
+  const now = ac.currentTime;
+  out.gain.linearRampToValueAtTime(0.35, now + 0.05);
+
+  let stopped = false;
+  return {
+    setPoints(next: EqPoint[]) {
+      const t = ac.currentTime;
+      next.forEach((p, i) => {
+        const f = filters[i];
+        if (!f) return;
+        f.frequency.cancelScheduledValues(t);
+        f.frequency.linearRampToValueAtTime(p.freq, t + 0.03);
+        f.gain.cancelScheduledValues(t);
+        f.gain.linearRampToValueAtTime(p.gainDb, t + 0.03);
+      });
+    },
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      const t = ac.currentTime;
+      out.gain.cancelScheduledValues(t);
+      out.gain.linearRampToValueAtTime(0, t + 0.08);
+      stopSource(t + 0.12);
+    },
+  };
+}
+export type SustainedMultiBand = ReturnType<typeof startSustainedMultiBand>;
+
+/** One-shot multi-band preview (e.g. "hear my current curve" ▶ button). */
+export function playMultiBandPreview(points: EqPoint[], duration = 1.6, opts: SignalOptions = {}) {
+  const ac = getAudioContext();
+  const source: NoiseSource = opts.source ?? "pink";
+  const q = opts.q ?? 2.5;
+
+  const { head, tail } = buildPeakingChain(ac, points, q);
+  const out = ac.createGain();
+  out.gain.value = 0;
+
+  if (source === "music") {
+    const pad = buildMusicPad(ac);
+    pad.node.connect(head);
+    pad.start(ac.currentTime);
+    pad.stop(ac.currentTime + duration + 0.1);
+  } else {
+    const src = buildNoiseSource(ac, source, duration + 0.2);
+    src.connect(head);
+    src.start(ac.currentTime);
+    src.stop(ac.currentTime + duration + 0.1);
+  }
+
+  if (opts.phone) {
+    const ph = buildPhoneFilters(ac);
+    tail.connect(ph.input);
+    ph.output.connect(out);
+  } else {
+    tail.connect(out);
+  }
+  out.connect(getAnalyser());
+
+  const now = ac.currentTime;
+  out.gain.setValueAtTime(0, now);
+  out.gain.linearRampToValueAtTime(0.35, now + 0.05);
+  out.gain.setValueAtTime(0.35, now + duration - 0.08);
+  out.gain.linearRampToValueAtTime(0, now + duration);
+}
+
 /** Play a sine tone at given frequency and gain (linear 0..1). */
 export function playTone(freq: number, duration = 1.2, gain = 0.25) {
   const ac = getAudioContext();
