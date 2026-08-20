@@ -4,7 +4,8 @@ import ReactMarkdown from "react-markdown";
 import {
   CheckCircle2,
   RotateCcw,
-  
+  Clock,
+  Gauge,
   ChevronRight,
   ChevronLeft,
   ChevronDown,
@@ -12,7 +13,6 @@ import {
   ListTree,
   MessageSquare,
   Send,
-  Sparkles,
 } from "lucide-react";
 import { getLessonBySlug, getCourseModules } from "@/lib/public.functions";
 import { submitQuiz } from "@/lib/community.functions";
@@ -64,6 +64,28 @@ const REACTIONS = [
   { key: "clap", emoji: "👏", label: "Круто" },
   { key: "hard", emoji: "😵", label: "Сложно" },
 ];
+
+const DIFFICULTY_LABEL: Record<string, string> = {
+  beginner: "Легко",
+  intermediate: "Средне",
+  pro: "Профи",
+};
+
+function formatDuration(min: number) {
+  if (!min) return "—";
+  if (min < 60) return `${min} мин`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h} ч ${m} мин` : `${h} ч`;
+}
+
+// Real subtopics for the lesson, not invented ones — pulled straight from
+// its own "## Heading" markdown sections (content_blocks-authored lessons
+// have no equivalent source yet, so this only ever fires for content_md).
+function extractTopics(md: string): string[] {
+  const matches = [...md.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
+  return matches.slice(0, 4);
+}
 
 function LessonPage() {
   const { slug } = Route.useParams();
@@ -143,6 +165,8 @@ function LessonPage() {
   const totalLessons = flatLessons.length;
   const progressNum = currentIdx >= 0 ? currentIdx + 1 : 0;
   const pct = totalLessons ? Math.round((progressNum / totalLessons) * 100) : 0;
+  const blocksForTopics = (lesson.content_blocks as Block[] | null) ?? [];
+  const topics = blocksForTopics.length === 0 ? extractTopics(lesson.content_md ?? "") : [];
 
   return (
     <div className="mx-auto w-full max-w-[1400px] px-3 py-4 sm:px-6 sm:py-6">
@@ -264,21 +288,38 @@ function LessonPage() {
             </div>
           ) : (
             <>
-              {/* Lesson header card */}
+              {/* Lesson header card — leads with the two facts that
+                  actually matter before you start (how hard, how long),
+                  both real fields on the lesson row, not decorative. */}
               <article className="rounded-lg border border-border/60 bg-surface-2/60 backdrop-blur">
                 <header className="border-b border-border/60 px-6 py-5">
-                  <div className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
-                    <span className="grid h-5 w-5 place-items-center rounded bg-mint/15 text-mint">
-                      <Sparkles className="h-3 w-3" />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-mint/30 bg-mint/10 px-3 py-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-mint">
+                      <Gauge className="h-3 w-3" />
+                      {DIFFICULTY_LABEL[lesson.difficulty] ?? lesson.difficulty}
                     </span>
-                    Урок · {currentLessonRef ? `${currentLessonRef.mIdx}.${currentLessonRef.lIdx}` : ""} · {lesson.category}
-                    {isPremium && (
-                      <span className="ml-1">
-                        <PremiumBadge />
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-3/60 px-3 py-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {formatDuration(lesson.duration_min)}
+                    </span>
+                    {currentLessonRef && (
+                      <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground/70">
+                        {currentLessonRef.mIdx}.{currentLessonRef.lIdx} · {lesson.category}
                       </span>
                     )}
+                    {isPremium && <PremiumBadge />}
                   </div>
-                  <h1 className="mt-2 text-2xl font-extrabold leading-tight text-foreground sm:text-[28px]">{lesson.title}</h1>
+                  <h1 className="mt-3 text-2xl font-extrabold leading-tight text-foreground sm:text-[28px]">{lesson.title}</h1>
+                  {topics.length > 0 && (
+                    <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
+                      {topics.map((t) => (
+                        <li key={t} className="flex items-center gap-1.5 text-sm text-foreground/70">
+                          <span className="h-1 w-1 shrink-0 rounded-full bg-mint" />
+                          {t}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </header>
 
                 <div className="mixpro-prose px-6 py-6 sm:px-8">
