@@ -105,10 +105,14 @@ export function SignalVisualizer({
           const x = hzToX(hz);
           ctx2d.beginPath(); ctx2d.moveTo(x, 0); ctx2d.lineTo(x, h); ctx2d.stroke();
         });
-        const bars = 96;
-        const barW = w / bars;
-        for (let i = 0; i < bars; i++) {
-          const t = i / bars;
+
+        // Filled mountain-shape spectrum from real FFT data — a continuous
+        // silhouette (reference: Mastering The Mix's EQ Academy) instead of
+        // discrete EQ-style bars.
+        const samples = 160;
+        const pts: [number, number][] = new Array(samples + 1);
+        for (let i = 0; i <= samples; i++) {
+          const t = i / samples;
           const hz = Math.pow(10, logMin + t * (logMax - logMin));
           const bin = Math.min(freqBuf.length - 1, Math.max(0, Math.round((hz / nyquist) * freqBuf.length)));
           let sum = 0, count = 0;
@@ -117,12 +121,52 @@ export function SignalVisualizer({
             if (b >= 0 && b < freqBuf.length) { sum += freqBuf[b]; count++; }
           }
           const v = count ? sum / count / 255 : 0;
-          const barH = Math.max(1, v * h * 0.95);
-          const x = i * barW;
-          const isNear = highlightHz != null && Math.abs(Math.log10(hz) - Math.log10(highlightHz)) < 0.12;
-          ctx2d.fillStyle = active ? (isNear ? color : dimColor) : "rgba(255,255,255,0.06)";
-          ctx2d.fillRect(x + 0.5, h - barH, Math.max(1, barW - 1.5), barH);
+          pts[i] = [t * w, h - Math.max(0, v * h * 0.92)];
         }
+
+        if (active) {
+          ctx2d.beginPath();
+          ctx2d.moveTo(pts[0][0], h);
+          for (const [x, y] of pts) ctx2d.lineTo(x, y);
+          ctx2d.lineTo(pts[pts.length - 1][0], h);
+          ctx2d.closePath();
+          ctx2d.fillStyle = dimColor;
+          ctx2d.fill();
+
+          ctx2d.beginPath();
+          pts.forEach(([x, y], i) => { if (i === 0) ctx2d.moveTo(x, y); else ctx2d.lineTo(x, y); });
+          ctx2d.strokeStyle = "rgba(255,255,255,0.28)";
+          ctx2d.lineWidth = 1;
+          ctx2d.stroke();
+
+          // Soft highlight glow over the target-frequency region (drawn as
+          // a second, clipped-by-shape fill so it doesn't spill outside
+          // the silhouette).
+          if (highlightHz != null) {
+            const hx = hzToX(highlightHz);
+            ctx2d.save();
+            ctx2d.beginPath();
+            ctx2d.moveTo(pts[0][0], h);
+            for (const [x, y] of pts) ctx2d.lineTo(x, y);
+            ctx2d.lineTo(pts[pts.length - 1][0], h);
+            ctx2d.closePath();
+            ctx2d.clip();
+            const grad = ctx2d.createRadialGradient(hx, h, 0, hx, h, w * 0.2);
+            grad.addColorStop(0, color);
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            ctx2d.globalAlpha = 0.4;
+            ctx2d.fillStyle = grad;
+            ctx2d.fillRect(0, 0, w, h);
+            ctx2d.restore();
+          }
+        } else {
+          ctx2d.beginPath();
+          ctx2d.moveTo(0, h - 1);
+          ctx2d.lineTo(w, h - 1);
+          ctx2d.strokeStyle = "rgba(255,255,255,0.06)";
+          ctx2d.stroke();
+        }
+
         if (active && highlightHz != null && !compare) {
           const x = hzToX(highlightHz);
           ctx2d.strokeStyle = color;

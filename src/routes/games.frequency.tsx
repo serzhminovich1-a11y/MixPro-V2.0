@@ -898,7 +898,7 @@ function EqChart({
               <line x1={0} x2={1000} y1={y} y2={y}
                 stroke={db === 0 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.06)"}
                 strokeDasharray={db === 0 ? "0" : "3 5"} />
-              <text x={8} y={y - 3} fontSize="10" fontFamily="ui-monospace, monospace" fill="rgba(255,255,255,0.35)">
+              <text x={992} y={y - 3} textAnchor="end" fontSize="10" fontFamily="ui-monospace, monospace" fill="rgba(255,255,255,0.35)">
                 {db > 0 ? `+${db}` : db}
               </text>
             </g>
@@ -950,24 +950,41 @@ function EqChart({
         />
       </div>
 
-      {/* Guess marker (orange band) */}
+      {/* Guess marker — thin dashed guide line + a circular handle sitting
+          on the flat 0 dB line, echoing the reference's draggable EQ
+          control points. This game only guesses frequency (not gain), so
+          the handle rides the flat line horizontally rather than tracking
+          a curve height. */}
       <div
         className="pointer-events-none absolute top-3 bottom-8"
         style={{
-          left: `calc(${markerPct}% - 12px)`,
-          width: "24px",
-          borderLeft: "2px solid #ff8a3d",
-          borderRight: "2px solid #ff8a3d",
-          background: "linear-gradient(180deg, rgba(255,138,61,0.18), rgba(255,138,61,0.05))",
-          borderRadius: "4px",
-          boxShadow: "0 0 20px rgba(255,138,61,0.35)",
+          left: `${markerPct}%`,
           transition: answered ? "left 260ms cubic-bezier(.2,.7,.2,1)" : "none",
         }}
       >
+        <div
+          className="absolute inset-y-0"
+          style={{ left: 0, width: "1.5px", background: "repeating-linear-gradient(to bottom, rgba(255,138,61,0.55) 0 4px, transparent 4px 8px)" }}
+        />
+        <div
+          className="absolute rounded-full"
+          style={{
+            left: "-8px",
+            top: "calc(50% - 8px)",
+            width: "16px",
+            height: "16px",
+            background: "#ff8a3d",
+            border: "2px solid rgba(10,10,14,0.6)",
+            boxShadow: "0 0 14px rgba(255,138,61,0.6)",
+          }}
+        />
         {answered && (
           <div
-            className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-0.5 font-mono text-[11px] font-bold"
+            className="absolute whitespace-nowrap rounded-md px-2 py-0.5 font-mono text-[11px] font-bold"
             style={{
+              left: "50%",
+              top: "calc(50% - 34px)",
+              transform: "translateX(-50%)",
               background: answered.correct ? "var(--fq-acc)" : "var(--fq-danger)",
               color: answered.correct ? "var(--fq-acc-ink)" : "#000",
             }}
