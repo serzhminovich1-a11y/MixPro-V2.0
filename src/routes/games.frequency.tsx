@@ -847,27 +847,41 @@ function EqChart({
   const markerPct = freqToPct(displayFreq);
   const targetPct = target !== null ? freqToPct(target) : 50;
 
-  // Bell curve path for post-answer view
+  // Bell shape shared by both the curve path and the handle's own height —
+  // same "single point, live curve" idea as the reference's draggable EQ
+  // points, just with one point instead of three (this game guesses one
+  // frequency, not a 3-band shape). Live-tracks the guess while unanswered
+  // (drag the point, the curve follows in real time); once answered it
+  // re-centers on the true target to reveal it, same as before.
+  const BOOST_PX = 90; // ~+12 dB visual
+  const BELL_Q = 0.35; // width of the bell in octaves
+  const bellGaussAt = useCallback((f: number, center: number) => {
+    const octDist = Math.log2(f / center);
+    return Math.exp(-(octDist * octDist) / (2 * BELL_Q * BELL_Q));
+  }, []);
+  const curveCenter = answered ? target : displayFreq;
   const bellPath = useMemo(() => {
-    if (target === null) return "";
-    // sample 200 points across width
-    const width = 1000;
-    const height = 300;
-    const midY = height / 2;
-    const boostPx = 90; // corresponds to ~+12 dB visual
-    const q = 0.35; // width of bell in octaves
+    if (curveCenter === null) return "";
+    const width = 1000, height = 300, midY = height / 2;
     const pts: string[] = [];
     for (let i = 0; i <= 200; i++) {
       const pct = (i / 200) * 100;
       const f = pctToFreq(pct);
-      const octDist = Math.log2(f / target);
-      const gauss = Math.exp(-(octDist * octDist) / (2 * q * q));
+      const gauss = bellGaussAt(f, curveCenter);
       const x = (pct / 100) * width;
-      const y = midY - gauss * boostPx;
+      const y = midY - gauss * BOOST_PX;
       pts.push(`${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`);
     }
     return pts.join(" ");
-  }, [target]);
+  }, [curveCenter, bellGaussAt]);
+  // Where the draggable handle sits vertically — on the curve itself, not
+  // a fixed height, so after answering a near-miss guess visibly rests
+  // partway up the true curve's slope instead of always at the peak.
+  // 150/320 matches the bell path's own local midline (see bellPath above);
+  // approximated against the marker's own slightly-inset box the same way
+  // the original fixed "50%" already did for the flat line — close enough
+  // over a ~300px chart that the few-px difference isn't visible.
+  const markerTopPct = curveCenter === null ? 50 : ((150 - bellGaussAt(displayFreq, curveCenter) * BOOST_PX) / 320) * 100;
 
   const ticks = [20, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000];
   const dbLines = [-24, -12, -4, 0, 4, 12, 24];
@@ -917,14 +931,19 @@ function EqChart({
           );
         })}
 
-        {/* Flat 0 dB line (accent) */}
-        <line x1={0} x2={1000} y1={160} y2={160} stroke="var(--fq-acc)" strokeWidth="2" opacity={answered ? 0.35 : 0.9} />
+        {/* Flat 0 dB line (accent) — recedes once there's a live curve on top of it */}
+        <line x1={0} x2={1000} y1={160} y2={160} stroke="var(--fq-acc)" strokeWidth="2" opacity={curveCenter !== null ? 0.35 : 0.9} />
 
-        {/* Bell curve when revealed */}
-        {answered && (
+        {/* Live EQ curve — always visible and centered on the guess while
+            unanswered (drag the point, the curve follows), re-centered on
+            the true target once answered to reveal it. Orange while
+            editing (matches the handle = "this is your guess"), accent
+            color once revealed = "this is the truth". */}
+        {curveCenter !== null && (
           <>
-            <path d={`${bellPath} L1000,160 L0,160 Z`} fill="var(--fq-acc)" opacity="0.15" />
-            <path d={bellPath} stroke="var(--fq-acc)" strokeWidth="2.5" fill="none" style={{ filter: "drop-shadow(0 0 8px var(--fq-acc))" }} />
+            <path d={`${bellPath} L1000,150 L0,150 Z`} fill={answered ? "var(--fq-acc)" : "#ff8a3d"} opacity="0.15" />
+            <path d={bellPath} stroke={answered ? "var(--fq-acc)" : "#ff8a3d"} strokeWidth="2.5" fill="none"
+              style={{ filter: `drop-shadow(0 0 8px ${answered ? "var(--fq-acc)" : "#ff8a3d"})` }} />
           </>
         )}
 
@@ -953,8 +972,10 @@ function EqChart({
       {/* Guess marker — thin dashed guide line + a circular handle sitting
           on the flat 0 dB line, echoing the reference's draggable EQ
           control points. This game only guesses frequency (not gain), so
-          the handle rides the flat line horizontally rather than tracking
-          a curve height. */}
+          the handle rides the live curve's own height (markerTopPct) —
+          while dragging it sits exactly on the curve's peak (the curve is
+          centered on the guess), and after answering a near-miss guess
+          visibly rests partway down the true curve's slope. */}
       <div
         className="pointer-events-none absolute top-3 bottom-8"
         style={{
@@ -970,12 +991,13 @@ function EqChart({
           className="absolute rounded-full"
           style={{
             left: "-8px",
-            top: "calc(50% - 8px)",
+            top: `calc(${markerTopPct}% - 8px)`,
             width: "16px",
             height: "16px",
             background: "#ff8a3d",
             border: "2px solid rgba(10,10,14,0.6)",
             boxShadow: "0 0 14px rgba(255,138,61,0.6)",
+            transition: answered ? "top 260ms cubic-bezier(.2,.7,.2,1)" : "none",
           }}
         />
         {answered && (
@@ -983,10 +1005,11 @@ function EqChart({
             className="absolute whitespace-nowrap rounded-md px-2 py-0.5 font-mono text-[11px] font-bold"
             style={{
               left: "50%",
-              top: "calc(50% - 34px)",
+              top: `calc(${markerTopPct}% - 34px)`,
               transform: "translateX(-50%)",
               background: answered.correct ? "var(--fq-acc)" : "var(--fq-danger)",
               color: answered.correct ? "var(--fq-acc-ink)" : "#000",
+              transition: "top 260ms cubic-bezier(.2,.7,.2,1)",
             }}
           >
             {formatHz(target ?? 0)} {answered.correct ? "✓" : "✗"}
