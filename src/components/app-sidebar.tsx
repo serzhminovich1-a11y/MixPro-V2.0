@@ -21,6 +21,7 @@ import {
   Library,
   Waves,
   ShoppingBag,
+  Palette,
   ShieldAlert,
   ShieldCheck,
   Bell,
@@ -87,6 +88,7 @@ const groups: Group[] = [
       { label: "Подписки", to: "/admin", hash: "subs", icon: Crown, badge: "SU" },
       { label: "Выручка и аналитика", to: "/admin/subscriptions", icon: CreditCard, badge: "SU" },
       { label: "Команда", to: "/admin/team", icon: UserCog, badge: "SU" },
+      { label: "Настройки сайта", to: "/admin/site-settings", icon: Palette, badge: "SU" },
     ],
   },
   {

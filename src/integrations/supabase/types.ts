@@ -1048,6 +1048,30 @@ export type Database = {
         }
         Relationships: []
       }
+      site_settings: {
+        Row: {
+          accent_color: string | null
+          id: boolean
+          nav_order: string[] | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          accent_color?: string | null
+          id?: boolean
+          nav_order?: string[] | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          accent_color?: string | null
+          id?: boolean
+          nav_order?: string[] | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       screenshots: {
         Row: {
           author_id: string

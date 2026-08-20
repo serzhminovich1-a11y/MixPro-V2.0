@@ -439,3 +439,11 @@ export const getSiteStats = createServerFn({ method: "GET" }).handler(async () =
     lessons: lessons.count ?? 0,
   };
 });
+
+// Site-wide appearance settings — see admin.site-settings.tsx. Single row,
+// publicly readable (every visitor's page needs it to render the right
+// accent/nav order), writable only by super-admins.
+export const getSiteSettings = createServerFn({ method: "GET" }).handler(async () => {
+  const { data } = await pub().from("site_settings").select("accent_color, nav_order").eq("id", true).maybeSingle();
+  return { accentColor: data?.accent_color ?? null, navOrder: data?.nav_order ?? null };
+});

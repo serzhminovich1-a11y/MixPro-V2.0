@@ -54,6 +54,7 @@ import { Route as AuthenticatedPostPostIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedMessagesThreadIdRouteImport } from './routes/_authenticated/messages.$threadId'
 import { Route as AuthenticatedAdminTeamRouteImport } from './routes/_authenticated/admin.team'
 import { Route as AuthenticatedAdminSubscriptionsRouteImport } from './routes/_authenticated/admin.subscriptions'
+import { Route as AuthenticatedAdminSiteSettingsRouteImport } from './routes/_authenticated/admin.site-settings'
 import { Route as AuthenticatedAdminMerchRouteImport } from './routes/_authenticated/admin.merch'
 import { Route as AuthenticatedAdminLoopsRouteImport } from './routes/_authenticated/admin.loops'
 import { Route as AuthenticatedAdminLogRouteImport } from './routes/_authenticated/admin.log'
@@ -289,6 +290,12 @@ const AuthenticatedAdminSubscriptionsRoute =
     path: '/admin/subscriptions',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminSiteSettingsRoute =
+  AuthenticatedAdminSiteSettingsRouteImport.update({
+    id: '/admin/site-settings',
+    path: '/admin/site-settings',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAdminMerchRoute = AuthenticatedAdminMerchRouteImport.update({
   id: '/admin/merch',
   path: '/admin/merch',
@@ -374,6 +381,7 @@ export interface FileRoutesByFullPath {
   '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
   '/admin/merch': typeof AuthenticatedAdminMerchRoute
+  '/admin/site-settings': typeof AuthenticatedAdminSiteSettingsRoute
   '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/admin/team': typeof AuthenticatedAdminTeamRoute
   '/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
@@ -427,6 +435,7 @@ export interface FileRoutesByTo {
   '/admin/log': typeof AuthenticatedAdminLogRoute
   '/admin/loops': typeof AuthenticatedAdminLoopsRoute
   '/admin/merch': typeof AuthenticatedAdminMerchRoute
+  '/admin/site-settings': typeof AuthenticatedAdminSiteSettingsRoute
   '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/admin/team': typeof AuthenticatedAdminTeamRoute
   '/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
@@ -482,6 +491,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/log': typeof AuthenticatedAdminLogRoute
   '/_authenticated/admin/loops': typeof AuthenticatedAdminLoopsRoute
   '/_authenticated/admin/merch': typeof AuthenticatedAdminMerchRoute
+  '/_authenticated/admin/site-settings': typeof AuthenticatedAdminSiteSettingsRoute
   '/_authenticated/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/_authenticated/admin/team': typeof AuthenticatedAdminTeamRoute
   '/_authenticated/messages/$threadId': typeof AuthenticatedMessagesThreadIdRoute
@@ -537,6 +547,7 @@ export interface FileRouteTypes {
     | '/admin/log'
     | '/admin/loops'
     | '/admin/merch'
+    | '/admin/site-settings'
     | '/admin/subscriptions'
     | '/admin/team'
     | '/messages/$threadId'
@@ -590,6 +601,7 @@ export interface FileRouteTypes {
     | '/admin/log'
     | '/admin/loops'
     | '/admin/merch'
+    | '/admin/site-settings'
     | '/admin/subscriptions'
     | '/admin/team'
     | '/messages/$threadId'
@@ -644,6 +656,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/log'
     | '/_authenticated/admin/loops'
     | '/_authenticated/admin/merch'
+    | '/_authenticated/admin/site-settings'
     | '/_authenticated/admin/subscriptions'
     | '/_authenticated/admin/team'
     | '/_authenticated/messages/$threadId'
@@ -1005,6 +1018,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminSubscriptionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/site-settings': {
+      id: '/_authenticated/admin/site-settings'
+      path: '/admin/site-settings'
+      fullPath: '/admin/site-settings'
+      preLoaderRoute: typeof AuthenticatedAdminSiteSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/merch': {
       id: '/_authenticated/admin/merch'
       path: '/admin/merch'
@@ -1083,6 +1103,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminLogRoute: typeof AuthenticatedAdminLogRoute
   AuthenticatedAdminLoopsRoute: typeof AuthenticatedAdminLoopsRoute
   AuthenticatedAdminMerchRoute: typeof AuthenticatedAdminMerchRoute
+  AuthenticatedAdminSiteSettingsRoute: typeof AuthenticatedAdminSiteSettingsRoute
   AuthenticatedAdminSubscriptionsRoute: typeof AuthenticatedAdminSubscriptionsRoute
   AuthenticatedAdminTeamRoute: typeof AuthenticatedAdminTeamRoute
   AuthenticatedPostPostIdRoute: typeof AuthenticatedPostPostIdRoute
@@ -1102,6 +1123,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminLogRoute: AuthenticatedAdminLogRoute,
   AuthenticatedAdminLoopsRoute: AuthenticatedAdminLoopsRoute,
   AuthenticatedAdminMerchRoute: AuthenticatedAdminMerchRoute,
+  AuthenticatedAdminSiteSettingsRoute: AuthenticatedAdminSiteSettingsRoute,
   AuthenticatedAdminSubscriptionsRoute: AuthenticatedAdminSubscriptionsRoute,
   AuthenticatedAdminTeamRoute: AuthenticatedAdminTeamRoute,
   AuthenticatedPostPostIdRoute: AuthenticatedPostPostIdRoute,

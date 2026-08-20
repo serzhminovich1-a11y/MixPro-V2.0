@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LogOut,
@@ -23,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useAdmin } from "@/hooks/use-admin";
 import { useSiteTheme } from "@/hooks/use-theme-mode";
+import { useSiteSettings } from "@/hooks/use-site-settings";
 import { SITE_THEMES, type SiteThemeId } from "@/lib/site-themes";
 import { MixproLogo, type LogoVariant } from "@/components/mixpro-logo";
 import { NotificationsBell } from "@/components/notifications-bell";
@@ -35,7 +36,9 @@ function readLogoVariant(): LogoVariant {
   return v ?? "inline";
 }
 
-const tools = [
+// Exported so the site-settings admin page can reorder this exact list
+// (same labels/icons/order) instead of keeping a second copy in sync.
+export const tools = [
   { to: "/leaderboard", label: "Рейтинг", icon: Trophy },
   { to: "/games", label: "Игры", icon: Gamepad2 },
   { to: "/learn", label: "Обучение", icon: GraduationCap },
@@ -75,6 +78,17 @@ export function SiteNav() {
   const [cpu, setCpu] = useState(14);
   const [lvl, setLvl] = useState(6);
   const { theme, auto, setTheme, toggleAuto } = useSiteTheme();
+  const { navOrder } = useSiteSettings();
+  const orderedTools = useMemo(() => {
+    if (!navOrder || navOrder.length === 0) return tools;
+    // Anything in the saved order comes first (in that order); anything new
+    // since the order was last saved (a tool added to the codebase later)
+    // just falls back to appearing at the end, in its original order.
+    const byPath = new Map<string, (typeof tools)[number]>(tools.map((t) => [t.to, t]));
+    const ordered = navOrder.map((to) => byPath.get(to)).filter((t): t is (typeof tools)[number] => !!t);
+    const remaining = tools.filter((t) => !navOrder.includes(t.to));
+    return [...ordered, ...remaining];
+  }, [navOrder]);
   const [logoVariant, setLogoVariant] = useState<LogoVariant>(readLogoVariant);
   useEffect(() => {
     setLogoVariant(readLogoVariant());
@@ -325,7 +339,7 @@ export function SiteNav() {
         </div>
 
         <nav className="flex items-center gap-1">
-          {tools.map((t) => {
+          {orderedTools.map((t) => {
             if ("disabled" in t && t.disabled) {
               return (
                 <span
