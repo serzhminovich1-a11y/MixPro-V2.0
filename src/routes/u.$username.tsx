@@ -15,6 +15,7 @@ import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
 import { PremiumBadge } from "@/components/premium-paywall";
 import { ScreenshotGallery } from "@/components/screenshot-gallery";
 import { StarRating } from "@/components/star-rating";
+import { VideoGrid } from "@/components/video-grid";
 
 const profileQuery = (username: string) =>
   queryOptions({
@@ -278,6 +279,13 @@ function PublicProfilePage() {
                 </Link>
               ))}
             </div>
+          </div>
+        )}
+
+        {data.videos.length > 0 && (
+          <div className="glass mt-5 rounded-2xl p-5">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Видео · {data.videos.length}</p>
+            <VideoGrid videos={data.videos} />
           </div>
         )}
 

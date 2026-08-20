@@ -27,6 +27,8 @@ import { PremiumBadge } from "@/components/premium-paywall";
 import { ScreenshotGallery, type GalleryScreenshot } from "@/components/screenshot-gallery";
 import { StarRating } from "@/components/star-rating";
 import { BannerImage } from "@/components/banner-image";
+import { VideoGrid, type GalleryVideo } from "@/components/video-grid";
+import { isValidVideoUrl } from "@/lib/video-embed";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -117,6 +119,11 @@ function ProfilePage() {
   const [myReviews, setMyReviews] = useState<{ id: string; rating: number; content: string | null; preset: { id: string; title: string; daw: string } | null }[]>([]);
   const [myGuides, setMyGuides] = useState<Tables<"guides">[]>([]);
   const [showGuideForm, setShowGuideForm] = useState(false);
+  const [myVideos, setMyVideos] = useState<GalleryVideo[]>([]);
+  const [showVideoForm, setShowVideoForm] = useState(false);
+  const [videoTitle, setVideoTitle] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [savingVideo, setSavingVideo] = useState(false);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const [roles, setRoles] = useState<string[]>([]);
   const [staffPerms, setStaffPerms] = useState<{ can_manage_courses: boolean; can_view_finances: boolean } | null>(null);
@@ -207,7 +214,7 @@ function ProfilePage() {
 
   useEffect(() => {
     async function load() {
-      const [p, s, lp, pr, rl, sp, uc, ac, sh, gd] = await Promise.all([
+      const [p, s, lp, pr, rl, sp, uc, ac, sh, gd, vd] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
         supabase.from("game_scores").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
         supabase.from("lesson_progress").select("id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -220,6 +227,7 @@ function ProfilePage() {
         supabase.from("certifications").select("id, name, color, icon"),
         supabase.from("screenshots").select("id, image_url, caption").eq("author_id", user.id).order("created_at", { ascending: false }),
         supabase.from("guides").select("*").eq("author_id", user.id).order("created_at", { ascending: false }),
+        supabase.from("videos").select("id, title, url").eq("author_id", user.id).order("created_at", { ascending: false }),
       ]);
       if (p.data) {
         setProfile(p.data);
@@ -234,6 +242,7 @@ function ProfilePage() {
       if (pr.data) { setMyPresets(pr.data); setPresetsCount(pr.data.length); }
       if (sh.data) setScreenshots(sh.data);
       if (gd.data) setMyGuides(gd.data);
+      if (vd.data) setMyVideos(vd.data);
       if (rl.data) setRoles(rl.data.map((r) => r.role as string));
       if (sp.data) setStaffPerms(sp.data);
       const certMap = new Map((ac.data ?? []).map((c) => [c.id, c]));
@@ -398,6 +407,28 @@ function ProfilePage() {
     if (guide.cover_image) removeStorageObjects([guide.cover_image]);
     await supabase.from("guides").delete().eq("id", id);
     setMyGuides((prev) => prev.filter((g) => g.id !== id));
+  }
+
+  async function submitVideo(e: React.FormEvent) {
+    e.preventDefault();
+    if (!videoTitle.trim() || !isValidVideoUrl(videoUrl)) return;
+    setSavingVideo(true);
+    const { data, error } = await supabase
+      .from("videos")
+      .insert({ author_id: user.id, title: videoTitle.trim(), url: videoUrl.trim() })
+      .select("id, title, url")
+      .single();
+    setSavingVideo(false);
+    if (!error && data) {
+      setMyVideos((prev) => [data, ...prev]);
+      setVideoTitle(""); setVideoUrl(""); setShowVideoForm(false);
+    }
+  }
+
+  async function deleteVideo(id: string) {
+    if (!confirm("Удалить видео?")) return;
+    await supabase.from("videos").delete().eq("id", id);
+    setMyVideos((prev) => prev.filter((v) => v.id !== id));
   }
 
   async function setAccentColor(id: string) {
@@ -857,6 +888,43 @@ function ProfilePage() {
           </div>
         ) : (
           <p className="mt-3 text-xs text-muted-foreground">Пока нет руководств — поделись опытом сведения, мастеринга или работы с DAW.</p>
+        )}
+      </div>
+
+      <div className="glass mt-4 rounded-2xl p-5 md:p-6">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Видео{myVideos.length > 0 ? ` · ${myVideos.length}` : ""}</p>
+          <button type="button" onClick={() => setShowVideoForm((v) => !v)} className="inline-flex items-center gap-1.5 text-xs font-medium text-mint hover:underline">
+            <Play className="h-3.5 w-3.5" /> Добавить ссылку
+          </button>
+        </div>
+        {showVideoForm && (
+          <form onSubmit={submitVideo} className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-secondary/30 p-3">
+            <input
+              value={videoTitle}
+              onChange={(e) => setVideoTitle(e.target.value)}
+              placeholder="Название видео"
+              maxLength={120}
+              className="min-w-[160px] flex-1 rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <input
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder="Ссылка на YouTube"
+              className="min-w-[200px] flex-[2] rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <button type="submit" disabled={savingVideo || !videoTitle.trim() || !isValidVideoUrl(videoUrl)} className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+              {savingVideo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Добавить
+            </button>
+            {videoUrl && !isValidVideoUrl(videoUrl) && <p className="w-full text-xs text-destructive">Похоже, это не ссылка на YouTube.</p>}
+          </form>
+        )}
+        {myVideos.length > 0 ? (
+          <div className="mt-3">
+            <VideoGrid videos={myVideos} onDelete={deleteVideo} />
+          </div>
+        ) : (
+          !showVideoForm && <p className="mt-3 text-xs text-muted-foreground">Пока нет видео — добавь ссылку на разбор или туториал на YouTube.</p>
         )}
       </div>
 

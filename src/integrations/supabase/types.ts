@@ -1283,6 +1283,33 @@ export type Database = {
           },
         ]
       }
+      videos: {
+        Row: {
+          author_id: string
+          created_at: string
+          id: string
+          is_hidden: boolean
+          title: string
+          url: string
+        }
+        Insert: {
+          author_id: string
+          created_at?: string
+          id?: string
+          is_hidden?: boolean
+          title: string
+          url: string
+        }
+        Update: {
+          author_id?: string
+          created_at?: string
+          id?: string
+          is_hidden?: boolean
+          title?: string
+          url?: string
+        }
+        Relationships: []
+      }
       user_follows: {
         Row: {
           created_at: string
