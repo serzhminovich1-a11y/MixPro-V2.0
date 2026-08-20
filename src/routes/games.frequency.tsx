@@ -953,7 +953,12 @@ function EqChart({
     setFromClientX(e.clientX);
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    if (draggingRef.current && !answered) setFromClientX(e.clientX);
+    // Live-tracks on plain hover too, not just while a button is held —
+    // this is what actually makes the curve feel "live": move the cursor
+    // across the chart and the bell follows continuously, no click-drag
+    // required. (Previously gated on draggingRef, so the curve only ever
+    // moved during an active drag and looked frozen otherwise.)
+    if (!answered) setFromClientX(e.clientX);
   };
   const onPointerUp = (e: React.PointerEvent) => {
     if (rmbRef.current) { rmbRef.current = false; onHoldEnd(); }
@@ -967,13 +972,25 @@ function EqChart({
   const markerPct = freqToPct(displayFreq);
   const targetPct = target !== null ? freqToPct(target) : 50;
 
+  // Shared dB→y mapping, used by the grid lines, the flat 0 dB line, the
+  // curve, and the handle's height alike (single source of truth — a
+  // previous version had the curve and the grid computing this
+  // independently, which drifted out of sync by a few px). This game only
+  // ever boosts (never cuts), so the scale is deliberately asymmetric —
+  // most of the chart's height goes to the 0..+24 dB region that's
+  // actually ever drawn, instead of splitting it evenly with an unused
+  // negative half like a real console EQ display would.
+  const ZERO_Y = 230; // y-coordinate of the 0 dB line, in the 1000×320 viewBox
+  const PX_PER_DB = 8.75;
+  const dbToY = useCallback((db: number) => ZERO_Y - db * PX_PER_DB, []);
+
   // Bell shape shared by both the curve path and the handle's own height —
   // same "single point, live curve" idea as the reference's draggable EQ
   // points, just with one point instead of three (this game guesses one
   // frequency, not a 3-band shape). Live-tracks the guess while unanswered
-  // (drag the point, the curve follows in real time); once answered it
+  // (move the cursor, the curve follows in real time); once answered it
   // re-centers on the true target to reveal it, same as before.
-  const BOOST_PX = 90; // ~+12 dB visual
+  const PEAK_DB = 16; // cosmetic peak height — not tied 1:1 to diff.boostDb
   const BELL_Q = 0.35; // width of the bell in octaves
   const bellGaussAt = useCallback((f: number, center: number) => {
     const octDist = Math.log2(f / center);
@@ -982,36 +999,39 @@ function EqChart({
   const curveCenter = answered ? target : displayFreq;
   const bellPath = useMemo(() => {
     if (curveCenter === null) return "";
-    const width = 1000, height = 300, midY = height / 2;
+    const width = 1000;
     const pts: string[] = [];
     for (let i = 0; i <= 200; i++) {
       const pct = (i / 200) * 100;
       const f = pctToFreq(pct);
       const gauss = bellGaussAt(f, curveCenter);
       const x = (pct / 100) * width;
-      const y = midY - gauss * BOOST_PX;
+      const y = dbToY(gauss * PEAK_DB);
       pts.push(`${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`);
     }
     return pts.join(" ");
-  }, [curveCenter, bellGaussAt]);
+  }, [curveCenter, bellGaussAt, dbToY]);
   // Where the draggable handle sits vertically — on the curve itself, not
   // a fixed height, so after answering a near-miss guess visibly rests
   // partway up the true curve's slope instead of always at the peak.
-  // 150/320 matches the bell path's own local midline (see bellPath above);
-  // approximated against the marker's own slightly-inset box the same way
-  // the original fixed "50%" already did for the flat line — close enough
-  // over a ~300px chart that the few-px difference isn't visible.
-  const markerTopPct = curveCenter === null ? 50 : ((150 - bellGaussAt(displayFreq, curveCenter) * BOOST_PX) / 320) * 100;
+  const markerTopPct = curveCenter === null
+    ? (ZERO_Y / 320) * 100
+    : (dbToY(bellGaussAt(displayFreq, curveCenter) * PEAK_DB) / 320) * 100;
 
   const ticks = [20, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000];
-  const dbLines = [-24, -12, -4, 0, 4, 12, 24];
+  const dbLines = [-6, 0, 4, 12, 24];
 
   return (
     <div
       ref={wrapRef}
       className="relative w-full select-none touch-none"
       style={{
-        aspectRatio: "1000 / 320",
+        // Taller than the original 1000/320 — the chart read as cramped
+        // (curve + controls stacked into a short strip with dead space
+        // around it on the page). preserveAspectRatio="none" on the SVG
+        // below means every coordinate in it just stretches to fill this
+        // box, so growing the box needs no other math to change.
+        aspectRatio: "1000 / 460",
         borderRadius: "18px",
         border: "1px solid var(--fq-border)",
         background: "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.35))",
@@ -1026,7 +1046,7 @@ function EqChart({
       <svg viewBox="0 0 1000 320" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
         {/* dB grid */}
         {dbLines.map((db) => {
-          const y = 160 - (db / 24) * 130;
+          const y = dbToY(db);
           return (
             <g key={db}>
               <line x1={0} x2={1000} y1={y} y2={y}
@@ -1052,16 +1072,16 @@ function EqChart({
         })}
 
         {/* Flat 0 dB line (accent) — recedes once there's a live curve on top of it */}
-        <line x1={0} x2={1000} y1={160} y2={160} stroke="var(--fq-acc)" strokeWidth="2" opacity={curveCenter !== null ? 0.35 : 0.9} />
+        <line x1={0} x2={1000} y1={ZERO_Y} y2={ZERO_Y} stroke="var(--fq-acc)" strokeWidth="2" opacity={curveCenter !== null ? 0.35 : 0.9} />
 
         {/* Live EQ curve — always visible and centered on the guess while
-            unanswered (drag the point, the curve follows), re-centered on
+            unanswered (move the cursor, the curve follows), re-centered on
             the true target once answered to reveal it. Orange while
             editing (matches the handle = "this is your guess"), accent
             color once revealed = "this is the truth". */}
         {curveCenter !== null && (
           <>
-            <path d={`${bellPath} L1000,150 L0,150 Z`} fill={answered ? "var(--fq-acc)" : "#ff8a3d"} opacity="0.15" />
+            <path d={`${bellPath} L1000,${ZERO_Y} L0,${ZERO_Y} Z`} fill={answered ? "var(--fq-acc)" : "#ff8a3d"} opacity="0.15" />
             <path d={bellPath} stroke={answered ? "var(--fq-acc)" : "#ff8a3d"} strokeWidth="2.5" fill="none"
               style={{ filter: `drop-shadow(0 0 8px ${answered ? "var(--fq-acc)" : "#ff8a3d"})` }} />
           </>
@@ -1150,7 +1170,7 @@ function EqChart({
 
       {/* Bottom hint */}
       <div className="pointer-events-none absolute bottom-1 left-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--fq-muted)" }}>
-        {answered ? " " : "ЛКМ — веди курсор · ПКМ — держать сигнал"}
+        {answered ? " " : "Веди курсором по графику · ПКМ — держать сигнал"}
       </div>
       <div className="pointer-events-none absolute bottom-1 right-3 font-mono text-[10px] font-bold" style={{ color: "var(--fq-acc)" }}>
         {playing ? "▲ Б · с бустом" : compare ? "◇ A · оригинал" : "тишина"}
