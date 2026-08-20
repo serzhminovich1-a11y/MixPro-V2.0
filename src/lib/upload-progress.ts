@@ -12,7 +12,7 @@ export type UploadOptions = {
   onProgress?: (p: UploadProgress) => void;
 };
 
-export type StoragePrefix = "avatars" | "banners" | "wall" | "presets" | "lesson-assets" | "game-loops" | "merch" | "screenshots";
+export type StoragePrefix = "avatars" | "banners" | "wall" | "presets" | "lesson-assets" | "game-loops" | "merch" | "screenshots" | "guides";
 
 /**
  * Upload a file straight from the browser to Yandex Object Storage, with

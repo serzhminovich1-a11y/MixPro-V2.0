@@ -25,6 +25,7 @@ import { Route as GamesIndexRouteImport } from './routes/games.index'
 import { Route as ForumIndexRouteImport } from './routes/forum.index'
 import { Route as UUsernameRouteImport } from './routes/u.$username'
 import { Route as LearnSlugRouteImport } from './routes/learn.$slug'
+import { Route as GuidesIdRouteImport } from './routes/guides.$id'
 import { Route as GamesReverbRouteImport } from './routes/games.reverb'
 import { Route as GamesPanRouteImport } from './routes/games.pan'
 import { Route as GamesFrequencyRouteImport } from './routes/games.frequency'
@@ -138,6 +139,11 @@ const UUsernameRoute = UUsernameRouteImport.update({
 const LearnSlugRoute = LearnSlugRouteImport.update({
   id: '/learn/$slug',
   path: '/learn/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GuidesIdRoute = GuidesIdRouteImport.update({
+  id: '/guides/$id',
+  path: '/guides/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GamesReverbRoute = GamesReverbRouteImport.update({
@@ -355,6 +361,7 @@ export interface FileRoutesByFullPath {
   '/games/frequency': typeof GamesFrequencyRoute
   '/games/pan': typeof GamesPanRoute
   '/games/reverb': typeof GamesReverbRoute
+  '/guides/$id': typeof GuidesIdRoute
   '/learn/$slug': typeof LearnSlugRoute
   '/u/$username': typeof UUsernameRoute
   '/forum/': typeof ForumIndexRoute
@@ -407,6 +414,7 @@ export interface FileRoutesByTo {
   '/games/frequency': typeof GamesFrequencyRoute
   '/games/pan': typeof GamesPanRoute
   '/games/reverb': typeof GamesReverbRoute
+  '/guides/$id': typeof GuidesIdRoute
   '/learn/$slug': typeof LearnSlugRoute
   '/u/$username': typeof UUsernameRoute
   '/forum': typeof ForumIndexRoute
@@ -461,6 +469,7 @@ export interface FileRoutesById {
   '/games/frequency': typeof GamesFrequencyRoute
   '/games/pan': typeof GamesPanRoute
   '/games/reverb': typeof GamesReverbRoute
+  '/guides/$id': typeof GuidesIdRoute
   '/learn/$slug': typeof LearnSlugRoute
   '/u/$username': typeof UUsernameRoute
   '/forum/': typeof ForumIndexRoute
@@ -515,6 +524,7 @@ export interface FileRouteTypes {
     | '/games/frequency'
     | '/games/pan'
     | '/games/reverb'
+    | '/guides/$id'
     | '/learn/$slug'
     | '/u/$username'
     | '/forum/'
@@ -567,6 +577,7 @@ export interface FileRouteTypes {
     | '/games/frequency'
     | '/games/pan'
     | '/games/reverb'
+    | '/guides/$id'
     | '/learn/$slug'
     | '/u/$username'
     | '/forum'
@@ -620,6 +631,7 @@ export interface FileRouteTypes {
     | '/games/frequency'
     | '/games/pan'
     | '/games/reverb'
+    | '/guides/$id'
     | '/learn/$slug'
     | '/u/$username'
     | '/forum/'
@@ -667,6 +679,7 @@ export interface RootRouteChildren {
   GamesFrequencyRoute: typeof GamesFrequencyRoute
   GamesPanRoute: typeof GamesPanRoute
   GamesReverbRoute: typeof GamesReverbRoute
+  GuidesIdRoute: typeof GuidesIdRoute
   LearnSlugRoute: typeof LearnSlugRoute
   UUsernameRoute: typeof UUsernameRoute
   ForumIndexRoute: typeof ForumIndexRoute
@@ -787,6 +800,13 @@ declare module '@tanstack/react-router' {
       path: '/learn/$slug'
       fullPath: '/learn/$slug'
       preLoaderRoute: typeof LearnSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/guides/$id': {
+      id: '/guides/$id'
+      path: '/guides/$id'
+      fullPath: '/guides/$id'
+      preLoaderRoute: typeof GuidesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/games/reverb': {
@@ -1139,6 +1159,7 @@ const rootRouteChildren: RootRouteChildren = {
   GamesFrequencyRoute: GamesFrequencyRoute,
   GamesPanRoute: GamesPanRoute,
   GamesReverbRoute: GamesReverbRoute,
+  GuidesIdRoute: GuidesIdRoute,
   LearnSlugRoute: LearnSlugRoute,
   UUsernameRoute: UUsernameRoute,
   ForumIndexRoute: ForumIndexRoute,

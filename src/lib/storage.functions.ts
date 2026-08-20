@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const PREFIXES = ["avatars", "banners", "wall", "presets", "lesson-assets", "game-loops", "merch", "screenshots"] as const;
+const PREFIXES = ["avatars", "banners", "wall", "presets", "lesson-assets", "game-loops", "merch", "screenshots", "guides"] as const;
 type Prefix = (typeof PREFIXES)[number];
 // lesson-assets/game-loops/merch are admin-authored content (lesson media,
 // ear-training loops, shop item photos) — only moderators write there. The

@@ -462,6 +462,39 @@ export type Database = {
           },
         ]
       }
+      guides: {
+        Row: {
+          author_id: string
+          content: string
+          cover_image: string | null
+          created_at: string
+          id: string
+          is_hidden: boolean
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          content: string
+          cover_image?: string | null
+          created_at?: string
+          id?: string
+          is_hidden?: boolean
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          cover_image?: string | null
+          created_at?: string
+          id?: string
+          is_hidden?: boolean
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       glossary_terms: {
         Row: {
           category: string

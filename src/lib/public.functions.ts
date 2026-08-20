@@ -35,10 +35,10 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
       .select("id, username, avatar_url, banner_url, accent_color, display_font, xp, level, verified, created_at, bio, full_name, socials, status_text")
       .ilike("username", input.username)
       .maybeSingle();
-    const empty = { profile: null, error: null as string | null, followerCount: 0, followingCount: 0, certs: [] as Cert[], presets: [] as PublicPreset[], screenshots: [] as PublicScreenshot[], reviews: [] as PublicReview[], isPremium: false };
+    const empty = { profile: null, error: null as string | null, followerCount: 0, followingCount: 0, certs: [] as Cert[], presets: [] as PublicPreset[], screenshots: [] as PublicScreenshot[], reviews: [] as PublicReview[], guides: [] as PublicGuide[], isPremium: false };
     if (error) return { ...empty, error: error.message };
     if (!data) return empty;
-    const [followers, following, userCertsRes, allCertsRes, presetsRes, screenshotsRes, reviewsRes, premiumRes] = await Promise.all([
+    const [followers, following, userCertsRes, allCertsRes, presetsRes, screenshotsRes, reviewsRes, guidesRes, premiumRes] = await Promise.all([
       s.from("user_follows").select("follower_id", { count: "exact", head: true }).eq("followed_id", data.id),
       s.from("user_follows").select("followed_id", { count: "exact", head: true }).eq("follower_id", data.id),
       // Badges — earned certifications. Both tables are publicly readable
@@ -51,6 +51,7 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
       // here too (same belt-and-suspenders convention as getPosts).
       s.from("screenshots").select("id, image_url, caption, created_at").eq("author_id", data.id).eq("is_hidden", false).order("created_at", { ascending: false }).limit(12),
       s.from("preset_reviews").select("id, preset_id, rating, content, created_at").eq("author_id", data.id).eq("is_hidden", false).order("created_at", { ascending: false }).limit(6),
+      s.from("guides").select("id, title, cover_image, created_at").eq("author_id", data.id).eq("is_hidden", false).order("created_at", { ascending: false }).limit(6),
       // Gates the full-page background perk — a boolean-only RPC (no raw
       // tier/expiry exposed) rather than selecting subscription_tier
       // directly, which has never been safe to expose (see the comment
@@ -75,7 +76,7 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
     }));
     return {
       profile: data, error: null, followerCount: followers.count ?? 0, followingCount: following.count ?? 0,
-      certs, presets: presetsRes.data ?? [], screenshots: screenshotsRes.data ?? [], reviews, isPremium: premiumRes.data === true,
+      certs, presets: presetsRes.data ?? [], screenshots: screenshotsRes.data ?? [], reviews, guides: guidesRes.data ?? [], isPremium: premiumRes.data === true,
     };
   });
 
@@ -83,6 +84,21 @@ type Cert = { id: string; slug: string; name: string; color: string; icon: strin
 type PublicPreset = { id: string; title: string; daw: string; genre: string | null; downloads: number; is_premium: boolean };
 type PublicScreenshot = { id: string; image_url: string; caption: string | null; created_at: string };
 type PublicReview = { id: string; rating: number; content: string | null; createdAt: string; preset: { id: string; title: string; daw: string } | null };
+type PublicGuide = { id: string; title: string; cover_image: string | null; created_at: string };
+
+export const getGuide = createServerFn({ method: "GET" })
+  .validator((input: { id: string }) => input)
+  .handler(async ({ data: input }) => {
+    const s = pub();
+    const { data, error } = await s
+      .from("guides")
+      .select("id, title, content, cover_image, author_id, created_at, is_hidden")
+      .eq("id", input.id)
+      .maybeSingle();
+    if (error || !data || data.is_hidden) return { guide: null, error: error?.message ?? null };
+    const { data: author } = await s.from("profiles").select("id, username, avatar_url").eq("id", data.author_id).maybeSingle();
+    return { guide: { ...data, author: author ?? null }, error: null };
+  });
 
 export const searchUsernames = createServerFn({ method: "GET" })
   .validator((input: { q: string }) => input)

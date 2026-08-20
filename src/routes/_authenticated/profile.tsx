@@ -6,6 +6,7 @@ import {
   Music4, Loader2, AlertTriangle, BadgeCheck, Clock,
   Search, LayoutGrid, List as ListIcon, Plus, ChevronDown, ChevronUp,
   Play, Heart, MessageCircle, Headphones, KeyRound, Sparkles, Lock, ExternalLink,
+  BookOpen,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -25,6 +26,7 @@ import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
 import { PremiumBadge } from "@/components/premium-paywall";
 import { ScreenshotGallery, type GalleryScreenshot } from "@/components/screenshot-gallery";
 import { StarRating } from "@/components/star-rating";
+import { BannerImage } from "@/components/banner-image";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -113,6 +115,8 @@ function ProfilePage() {
   const [myPresets, setMyPresets] = useState<Tables<"presets">[]>([]);
   const [screenshots, setScreenshots] = useState<GalleryScreenshot[]>([]);
   const [myReviews, setMyReviews] = useState<{ id: string; rating: number; content: string | null; preset: { id: string; title: string; daw: string } | null }[]>([]);
+  const [myGuides, setMyGuides] = useState<Tables<"guides">[]>([]);
+  const [showGuideForm, setShowGuideForm] = useState(false);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const [roles, setRoles] = useState<string[]>([]);
   const [staffPerms, setStaffPerms] = useState<{ can_manage_courses: boolean; can_view_finances: boolean } | null>(null);
@@ -203,7 +207,7 @@ function ProfilePage() {
 
   useEffect(() => {
     async function load() {
-      const [p, s, lp, pr, rl, sp, uc, ac, sh] = await Promise.all([
+      const [p, s, lp, pr, rl, sp, uc, ac, sh, gd] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
         supabase.from("game_scores").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
         supabase.from("lesson_progress").select("id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -215,6 +219,7 @@ function ProfilePage() {
         supabase.from("user_certifications").select("certification_id, awarded_at").eq("user_id", user.id),
         supabase.from("certifications").select("id, name, color, icon"),
         supabase.from("screenshots").select("id, image_url, caption").eq("author_id", user.id).order("created_at", { ascending: false }),
+        supabase.from("guides").select("*").eq("author_id", user.id).order("created_at", { ascending: false }),
       ]);
       if (p.data) {
         setProfile(p.data);
@@ -228,6 +233,7 @@ function ProfilePage() {
       setLessonsDone(lp.count ?? 0);
       if (pr.data) { setMyPresets(pr.data); setPresetsCount(pr.data.length); }
       if (sh.data) setScreenshots(sh.data);
+      if (gd.data) setMyGuides(gd.data);
       if (rl.data) setRoles(rl.data.map((r) => r.role as string));
       if (sp.data) setStaffPerms(sp.data);
       const certMap = new Map((ac.data ?? []).map((c) => [c.id, c]));
@@ -383,6 +389,15 @@ function ProfilePage() {
     removeStorageObjects([shot.image_url]);
     await supabase.from("screenshots").delete().eq("id", id);
     setScreenshots((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  async function deleteGuide(id: string) {
+    const guide = myGuides.find((g) => g.id === id);
+    if (!guide) return;
+    if (!confirm(`Удалить руководство «${guide.title}»?`)) return;
+    if (guide.cover_image) removeStorageObjects([guide.cover_image]);
+    await supabase.from("guides").delete().eq("id", id);
+    setMyGuides((prev) => prev.filter((g) => g.id !== id));
   }
 
   async function setAccentColor(id: string) {
@@ -820,6 +835,33 @@ function ProfilePage() {
 
       <div className="glass mt-4 rounded-2xl p-5 md:p-6">
         <div className="flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Руководства{myGuides.length > 0 ? ` · ${myGuides.length}` : ""}</p>
+          <button
+            type="button"
+            onClick={() => setShowGuideForm(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-mint hover:underline"
+          >
+            <BookOpen className="h-3.5 w-3.5" /> Написать
+          </button>
+        </div>
+        {myGuides.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {myGuides.map((g) => (
+              <div key={g.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5">
+                <Link to="/guides/$id" params={{ id: g.id }} className="min-w-0 truncate text-sm font-semibold text-mint hover:underline">{g.title}</Link>
+                <button type="button" onClick={() => deleteGuide(g.id)} aria-label="Удалить" className="shrink-0 text-muted-foreground hover:text-destructive">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">Пока нет руководств — поделись опытом сведения, мастеринга или работы с DAW.</p>
+        )}
+      </div>
+
+      <div className="glass mt-4 rounded-2xl p-5 md:p-6">
+        <div className="flex items-center justify-between">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Скриншоты{screenshots.length > 0 ? ` · ${screenshots.length}` : ""}</p>
           <button
             type="button"
@@ -1172,6 +1214,14 @@ function ProfilePage() {
         </div>
       )}
       </div>
+
+      {showGuideForm && (
+        <GuideFormModal
+          userId={user.id}
+          onClose={() => setShowGuideForm(false)}
+          onCreated={(g) => setMyGuides((prev) => [g, ...prev])}
+        />
+      )}
     </>
   );
 }
@@ -1179,6 +1229,90 @@ function ProfilePage() {
 
 // Unused helper kept to satisfy lint if imported elsewhere
 export const _unused = { AUDIO_EXTS, IMAGE_EXTS };
+
+// ─── Guide write form ───────────────────────────────────────────────────────
+
+function GuideFormModal({ userId, onClose, onCreated }: { userId: string; onClose: () => void; onCreated: (g: Tables<"guides">) => void }) {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [pendingCover, setPendingCover] = useState<File | null>(null);
+  const [coverPath, setCoverPath] = useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  async function uploadCover(blob: Blob) {
+    setUploadingCover(true);
+    const { error, path } = await uploadWithProgress("guides", "cover.jpg", blob, { contentType: "image/jpeg" });
+    setUploadingCover(false);
+    setPendingCover(null);
+    if (!error && path) setCoverPath(path);
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || !content.trim()) return;
+    setSaving(true);
+    const { data, error } = await supabase
+      .from("guides")
+      .insert({ author_id: userId, title: title.trim(), content: content.trim(), cover_image: coverPath })
+      .select()
+      .single();
+    setSaving(false);
+    if (!error && data) {
+      onCreated(data);
+      onClose();
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" onClick={onClose}>
+      <form onSubmit={submit} className="glass max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Написать руководство</h2>
+          <button type="button" onClick={onClose} aria-label="Закрыть"><X className="h-5 w-5" /></button>
+        </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-lg border border-border bg-secondary">
+            {coverPath && <BannerImage path={coverPath} className="h-full w-full object-cover" />}
+          </div>
+          <button type="button" onClick={() => coverInputRef.current?.click()} disabled={uploadingCover}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold hover:bg-secondary disabled:opacity-50">
+            <ImagePlus className="h-3.5 w-3.5" /> {uploadingCover ? "Загрузка…" : "Обложка (опц.)"}
+          </button>
+          <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) setPendingCover(f); if (coverInputRef.current) coverInputRef.current.value = ""; }} />
+        </div>
+        {pendingCover && (
+          <ImageEditor file={pendingCover} defaultAspect="16:9" maxOutput={1400} onCancel={() => setPendingCover(null)} onConfirm={uploadCover} />
+        )}
+
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Заголовок"
+          maxLength={120}
+          className="mt-4 w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-ring"
+        />
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Текст руководства — шаги, советы, референсы..."
+          rows={10}
+          maxLength={8000}
+          className="mt-2 w-full resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
+        <button
+          type="submit"
+          disabled={saving || uploadingCover || !title.trim() || !content.trim()}
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Опубликовать
+        </button>
+      </form>
+    </div>
+  );
+}
 
 // ─── Wall section ────────────────────────────────────────────────────────────
 

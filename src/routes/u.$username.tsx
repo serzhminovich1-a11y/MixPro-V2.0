@@ -268,6 +268,19 @@ function PublicProfilePage() {
           </div>
         )}
 
+        {data.guides.length > 0 && (
+          <div className="glass mt-5 rounded-2xl p-5">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Руководства · {data.guides.length}</p>
+            <div className="space-y-2">
+              {data.guides.map((g) => (
+                <Link key={g.id} to="/guides/$id" params={{ id: g.id }} className="block rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-sm font-semibold text-mint hover:underline">
+                  {g.title}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         <p className="mt-6 text-xs text-muted-foreground">
           С нами с {new Date(p.created_at).toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}.
         </p>
