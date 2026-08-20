@@ -400,6 +400,36 @@ export type Database = {
         }
         Relationships: []
       }
+      game_progress: {
+        Row: {
+          best_streak: number
+          game_type: string
+          level: number
+          mastery_score: number
+          sessions_played: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          best_streak?: number
+          game_type: string
+          level?: number
+          mastery_score?: number
+          sessions_played?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          best_streak?: number
+          game_type?: string
+          level?: number
+          mastery_score?: number
+          sessions_played?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       game_scores: {
         Row: {
           accuracy: number | null

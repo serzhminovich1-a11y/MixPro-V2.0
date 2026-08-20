@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { TutorialLauncher } from "@/components/games/tutorial-launcher";
 import {
   ArrowLeft, Volume2, VolumeX, Plus, Minus, Star, Flame, Target, Settings2, Play, RotateCcw,
-  Palette, Lightbulb, Check, X, Sliders, HelpCircle, Sparkles,
+  Palette, Lightbulb, Check, X, Sliders, HelpCircle, Sparkles, TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -71,6 +71,42 @@ const DIFFICULTY: Record<Difficulty, {
 const HARD_TARGETS = [60, 90, 150, 250, 400, 700, 1000, 1800, 3000, 5000, 8000, 12000];
 const EASY_TARGETS = [80, 400, 1000, 4000, 10000];
 
+// ─── Ranked level progression (EQ Academy-style) ───────────────────────────
+// Ranked mode doesn't use the manual difficulty picker at all — a
+// persistent, ever-growing level (see game_progress) drives an
+// auto-scaling difficulty curve instead: wider tolerance/bigger, easier-
+// to-hear boosts and a small snap-to-preset target pool at low levels,
+// tightening toward exact-frequency, no-snap, near-inaudible boosts from
+// a much larger target pool as the level climbs. Session average accuracy
+// ≥ LEVEL_UP_THRESHOLD unlocks the next level; it never goes back down.
+const LEVEL_UP_THRESHOLD = 70; // % avg accuracy needed to advance a level
+
+type EffDifficulty = {
+  name: string;
+  tolerancePct: number;
+  toleranceOct: number;
+  snap: boolean;
+  boostDb: number;
+  q: number;
+  targets: number[];
+};
+
+function levelDifficulty(level: number): EffDifficulty {
+  const tolerancePct = Math.round(3 + 22 * Math.exp(-(level - 1) / 12));
+  const boostDb = Math.round((4 + 8 * Math.exp(-(level - 1) / 15)) * 10) / 10;
+  const q = Math.round((1.5 + Math.min(6.5, (level - 1) * 0.18)) * 10) / 10;
+  const targets = level <= 5 ? EASY_TARGETS : level <= 15 ? FREQ_BANDS.map((b) => b.freq) : HARD_TARGETS;
+  return {
+    name: `Уровень ${level}`,
+    tolerancePct,
+    toleranceOct: Math.log2(1 + tolerancePct / 100),
+    snap: level <= 5,
+    boostDb,
+    q,
+    targets,
+  };
+}
+
 const DEFAULT_SETTINGS: Settings = {
   difficulty: "medium",
   rounds: 8,
@@ -125,12 +161,45 @@ function FrequencyGame() {
   const [cheatOpen, setCheatOpen] = useState(false);
   const [bonusFlash, setBonusFlash] = useState(0); // pulse animation trigger
   const [viz, setViz] = useState<VizMode>("spectrum");
+  const [progress, setProgress] = useState<{ level: number; mastery_score: number; sessions_played: number; best_streak: number }>({ level: 1, mastery_score: 0, sessions_played: 0, best_streak: 0 });
+  const [peakStreak, setPeakStreak] = useState(0);
+  const [leveledUp, setLeveledUp] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+    let alive = true;
+    supabase
+      .from("game_progress")
+      .select("level, mastery_score, sessions_played, best_streak")
+      .eq("user_id", session.user.id)
+      .eq("game_type", "frequency")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (alive && data) setProgress(data);
+      });
+    return () => { alive = false; };
+  }, [session]);
 
   const theme = useMemo<FrequencyTheme>(
     () => FREQUENCY_THEMES.find((t) => t.id === themeId) ?? FREQUENCY_THEMES[0],
     [themeId],
   );
-  const diff = DIFFICULTY[settings.difficulty];
+  // Ranked mode ignores the manual difficulty picker entirely — driven by
+  // the persistent level instead (see levelDifficulty above). Practice
+  // mode keeps the existing manual picker untouched.
+  const diff: EffDifficulty = useMemo(() => {
+    if (mode === "ranked") return levelDifficulty(progress.level);
+    const d = DIFFICULTY[settings.difficulty];
+    return {
+      name: d.name,
+      tolerancePct: d.tolerancePct,
+      toleranceOct: d.toleranceOct,
+      snap: d.snap,
+      boostDb: settings.boostDb,
+      q: settings.q,
+      targets: settings.difficulty === "easy" ? EASY_TARGETS : settings.difficulty === "medium" ? FREQ_BANDS.map((b) => b.freq) : HARD_TARGETS,
+    };
+  }, [mode, progress.level, settings.difficulty, settings.boostDb, settings.q]);
   const rounds = settings.rounds;
 
   useEffect(() => {
@@ -230,11 +299,11 @@ function FrequencyGame() {
   const signalOpts: SignalOptions = useMemo(
     () => ({
       source: settings.source === "loop" && !loopBuffer ? "pink" : settings.source,
-      q: settings.q,
+      q: diff.q,
       phone: settings.phone,
       loopBuffer: settings.source === "loop" ? loopBuffer ?? undefined : undefined,
     }),
-    [settings.source, settings.q, settings.phone, loopBuffer],
+    [settings.source, diff.q, settings.phone, loopBuffer],
   );
 
   /** Start looped playback held for as long as the user keeps input. */
@@ -242,7 +311,7 @@ function FrequencyGame() {
     if (freq === null || answered !== null) return;
     getAudioContext();
     stopSustained();
-    noiseRef.current = startSustainedNoise(freq, settings.boostDb, boosted, signalOpts);
+    noiseRef.current = startSustainedNoise(freq, diff.boostDb, boosted, signalOpts);
     setPlaying(true);
     setCompare(!boosted);
   }
@@ -253,7 +322,7 @@ function FrequencyGame() {
     getAudioContext();
     stopSustained();
     setPlaying(true);
-    playNoiseWithBoost(freq, 1.6, settings.boostDb, signalOpts);
+    playNoiseWithBoost(freq, 1.6, diff.boostDb, signalOpts);
     window.setTimeout(() => setPlaying(false), 1600);
   }
 
@@ -261,9 +330,7 @@ function FrequencyGame() {
   useEffect(() => () => { stopSustained(); }, []);
 
   function targetsForDifficulty(): number[] {
-    if (settings.difficulty === "easy") return EASY_TARGETS;
-    if (settings.difficulty === "medium") return FREQ_BANDS.map((b) => b.freq);
-    return HARD_TARGETS;
+    return diff.targets;
   }
 
   function newRound() {
@@ -282,8 +349,10 @@ function FrequencyGame() {
     setCorrect(0);
     setAccSum(0);
     setStreak(0);
+    setPeakStreak(0);
     setFinished(false);
     setSaved(false);
+    setLeveledUp(false);
     newRound();
   }
 
@@ -310,6 +379,7 @@ function FrequencyGame() {
     const nextAccSum = accSum + acc + bonus;
     setCorrect(nextCorrect);
     setStreak(nextStreak);
+    setPeakStreak((p) => Math.max(p, nextStreak));
     setAccSum(nextAccSum);
 
     if (perfection) setBonusFlash((n) => n + 1);
@@ -329,6 +399,28 @@ function FrequencyGame() {
             accuracy: finalAcc,
           });
           if (!error) setSaved(true);
+
+          // Level progression (EQ Academy-style): hit the required average
+          // accuracy for this session to unlock the next level. Never
+          // resets — mastery_score is a running average across all
+          // sessions ever played, same idea as EQ Academy's own metric.
+          const didLevelUp = finalAcc >= LEVEL_UP_THRESHOLD;
+          const nextLevel = didLevelUp ? progress.level + 1 : progress.level;
+          const nextMastery = (progress.mastery_score * progress.sessions_played + finalAcc) / (progress.sessions_played + 1);
+          const nextSessions = progress.sessions_played + 1;
+          const nextBest = Math.max(progress.best_streak, peakStreak, nextStreak);
+          const { data: savedProgress, error: progErr } = await supabase
+            .from("game_progress")
+            .upsert(
+              { user_id: session.user.id, game_type: "frequency", level: nextLevel, mastery_score: nextMastery, sessions_played: nextSessions, best_streak: nextBest, updated_at: new Date().toISOString() },
+              { onConflict: "user_id,game_type" },
+            )
+            .select()
+            .single();
+          if (!progErr && savedProgress) {
+            setProgress(savedProgress);
+            setLeveledUp(didLevelUp);
+          }
         }
       } else {
         setRound((r) => r + 1);
@@ -337,7 +429,6 @@ function FrequencyGame() {
     }, 2600);
   }
 
-  const level = Math.max(1, Math.floor(correct / 5) + 1);
   const points = Math.round(accSum);
   const inGame = mode !== null && !finished;
 
@@ -494,10 +585,11 @@ function FrequencyGame() {
           <div
             className="rounded-full border px-4 py-1.5 font-mono text-xs font-bold tracking-widest"
             style={{ borderColor: "var(--fq-border)", background: "var(--fq-panel)", color: "var(--fq-acc)" }}
+            title={`Mastery Score: ${Math.round(progress.mastery_score)}%`}
           >
-            Lv.{level}
+            Lv.{progress.level}
             <div className="mt-1 h-0.5 w-16 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full" style={{ width: `${(correct % 5) * 20}%`, background: "var(--fq-acc)" }} />
+              <div className="h-full" style={{ width: `${Math.min(100, Math.round(progress.mastery_score))}%`, background: "var(--fq-acc)" }} />
             </div>
           </div>
           <div
@@ -510,7 +602,15 @@ function FrequencyGame() {
 
         {/* Body */}
         {mode === null && !finished && (
-          <Lobby theme={theme} diffName={diff.name} onPlay={() => start("ranked")} onPractice={() => start("practice")} onSettings={() => setSettingsOpen(true)} />
+          <Lobby
+            theme={theme}
+            diffName={diff.name}
+            level={progress.level}
+            masteryScore={progress.mastery_score}
+            onPlay={() => start("ranked")}
+            onPractice={() => start("practice")}
+            onSettings={() => setSettingsOpen(true)}
+          />
         )}
         {inGame && (
           <PlayScreen
@@ -542,6 +642,8 @@ function FrequencyGame() {
             mode={mode!}
             saved={saved}
             signedIn={!!session}
+            leveledUp={leveledUp}
+            level={progress.level}
             onAgain={() => start(mode!)}
             onExit={exit}
           />
@@ -587,8 +689,8 @@ function snapToNearest(f: number, targets: number[]) {
 }
 
 function Lobby({
-  theme, diffName, onPlay, onPractice, onSettings,
-}: { theme: FrequencyTheme; diffName: string; onPlay: () => void; onPractice: () => void; onSettings: () => void }) {
+  theme, diffName, level, masteryScore, onPlay, onPractice, onSettings,
+}: { theme: FrequencyTheme; diffName: string; level: number; masteryScore: number; onPlay: () => void; onPractice: () => void; onSettings: () => void }) {
   return (
     <div className="mt-6 rounded-2xl border bg-black/40 p-8 backdrop-blur md:p-12" style={{ borderColor: "var(--fq-border)" }}>
       <div className="text-center">
@@ -597,6 +699,24 @@ function Lobby({
           <span style={{ color: "var(--fq-muted)" }}>·</span>
           <span style={{ color: "var(--fq-muted)" }}>{theme.tier}</span>
         </div>
+
+        {/* Prominent persistent level, EQ Academy-style ("LEVEL 32") — the
+            ever-growing ranked level, not a session-only counter. */}
+        <div
+          className="mx-auto mt-6 inline-flex items-center gap-5 rounded-full border px-7 py-3"
+          style={{ borderColor: "var(--fq-acc)", background: "var(--fq-acc-soft)" }}
+        >
+          <div className="text-left">
+            <div className="font-mono text-[9px] uppercase tracking-[0.3em]" style={{ color: "var(--fq-muted)" }}>Уровень</div>
+            <div className="font-mono text-3xl font-black leading-none" style={{ color: "var(--fq-acc)" }}>{level}</div>
+          </div>
+          <div className="h-9 w-px" style={{ background: "var(--fq-border)" }} />
+          <div className="text-left">
+            <div className="font-mono text-[9px] uppercase tracking-[0.3em]" style={{ color: "var(--fq-muted)" }}>Mastery</div>
+            <div className="font-mono text-3xl font-black leading-none text-white">{Math.round(masteryScore)}%</div>
+          </div>
+        </div>
+
         <h1 className="mt-6 text-4xl font-black leading-[1.05] tracking-tight md:text-6xl">
           Услышь{" "}
           <span className="bg-clip-text text-transparent" style={{ backgroundImage: theme.heroGradient }}>любую</span>
@@ -647,7 +767,7 @@ function PlayScreen({
 }: {
   round: number; rounds: number; target: number | null; guess: number;
   answered: null | { correct: boolean; accuracy: number; tip: FrequencyTip };
-  playing: boolean; compare: boolean; mode: Mode; diff: (typeof DIFFICULTY)[Difficulty];
+  playing: boolean; compare: boolean; mode: Mode; diff: EffDifficulty;
   viz: VizMode; onVizChange: (v: VizMode) => void;
   allowedTargets: number[];
   onGuess: (f: number) => void; onSubmit: () => void; onReplay: () => void;
@@ -1042,9 +1162,10 @@ function EqChart({
 /* ------------- Summary ------------- */
 
 function Summary({
-  correct, rounds, avgAcc, mode, saved, signedIn, onAgain, onExit,
+  correct, rounds, avgAcc, mode, saved, signedIn, leveledUp, level, onAgain, onExit,
 }: {
   correct: number; rounds: number; avgAcc: number; mode: Mode; saved: boolean; signedIn: boolean;
+  leveledUp: boolean; level: number;
   onAgain: () => void; onExit: () => void;
 }) {
   return (
@@ -1056,6 +1177,14 @@ function Summary({
       <div className="mt-2 font-mono text-sm" style={{ color: "var(--fq-muted)" }}>
         Средняя точность · <b style={{ color: "var(--fq-acc)" }}>{avgAcc}%</b>
       </div>
+      {mode === "ranked" && leveledUp && (
+        <div
+          className="mt-4 flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-mono text-sm font-bold uppercase tracking-widest"
+          style={{ borderColor: "var(--fq-acc)", background: "var(--fq-acc-soft)", color: "var(--fq-acc)" }}
+        >
+          <TrendingUp className="h-4 w-4" /> Уровень повышен — Lv.{level}!
+        </div>
+      )}
       <p className="mt-3 text-sm" style={{ color: "var(--fq-muted)" }}>
         {avgAcc >= 85 ? "Золотые уши. 🏆" : avgAcc >= 60 ? "Хороший результат — продолжай." : "Слух тренируется — попробуй ещё."}
       </p>
