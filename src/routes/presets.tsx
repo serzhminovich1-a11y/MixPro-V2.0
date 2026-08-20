@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
-import { SlidersHorizontal, Download, Upload, X, Lock } from "lucide-react";
+import { SlidersHorizontal, Download, Upload, X, Lock, MessageSquare, Loader2 } from "lucide-react";
 import { getPresets } from "@/lib/public.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -10,6 +10,7 @@ import { PremiumBadge } from "@/components/premium-paywall";
 import { RouteError, RouteNotFound } from "@/components/route-fallbacks";
 import { resolveStorageUrl } from "@/lib/storage-url";
 import { uploadWithProgress } from "@/lib/upload-progress";
+import { StarRating, StarPicker } from "@/components/star-rating";
 
 
 const presetsQuery = queryOptions({ queryKey: ["presets"], queryFn: () => getPresets() });
@@ -40,6 +41,7 @@ function PresetsPage() {
 
   const [dawFilter, setDawFilter] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [reviewsFor, setReviewsFor] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const router = useRouter();
 
@@ -113,6 +115,23 @@ function PresetsPage() {
               </div>
               <h3 className="mt-3 text-lg font-semibold">{preset.title}</h3>
               {preset.description && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{preset.description}</p>}
+              <button
+                type="button"
+                onClick={() => setReviewsFor(preset.id)}
+                className="mt-2 inline-flex items-center gap-1.5 self-start text-xs text-muted-foreground hover:text-foreground"
+              >
+                {preset.avgRating != null ? (
+                  <>
+                    <StarRating value={preset.avgRating} size={12} />
+                    <span className="font-mono">{preset.avgRating.toFixed(1)}</span>
+                    <span>({preset.reviewCount})</span>
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare className="h-3 w-3" /> Оставить отзыв
+                  </>
+                )}
+              </button>
               <div className="mt-auto flex items-center justify-between pt-4">
                 <span className="text-xs text-muted-foreground">
                   {preset.author?.username ?? "Аноним"} · {preset.downloads} ⬇
@@ -148,6 +167,112 @@ function PresetsPage() {
       )}
 
       {showUpload && session && <UploadModal onClose={() => setShowUpload(false)} userId={session.user.id} />}
+      {reviewsFor && (
+        <ReviewsModal
+          presetId={reviewsFor}
+          userId={session?.user.id ?? null}
+          onClose={() => setReviewsFor(null)}
+          onChanged={() => { queryClient.invalidateQueries({ queryKey: ["presets"] }); router.invalidate(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+type Review = { id: string; author_id: string; rating: number; content: string | null; created_at: string; author: { username: string } | null };
+
+function ReviewsModal({ presetId, userId, onClose, onChanged }: { presetId: string; userId: string | null; onClose: () => void; onChanged: () => void }) {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [myRating, setMyRating] = useState(0);
+  const [myContent, setMyContent] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase
+        .from("preset_reviews")
+        .select("id, author_id, rating, content, created_at")
+        .eq("preset_id", presetId)
+        .order("created_at", { ascending: false });
+      if (!alive) return;
+      if (!data) { setLoading(false); return; }
+      const authorIds = [...new Set(data.map((r) => r.author_id))];
+      const { data: profs } = authorIds.length
+        ? await supabase.from("profiles").select("id, username").in("id", authorIds)
+        : { data: [] as { id: string; username: string }[] };
+      const map = new Map((profs ?? []).map((p) => [p.id, p]));
+      const built = data.map((r) => ({ ...r, author: map.get(r.author_id) ?? null }));
+      setReviews(built);
+      const mine = built.find((r) => r.author_id === userId);
+      if (mine) { setMyRating(mine.rating); setMyContent(mine.content ?? ""); }
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, [presetId, userId]);
+
+  async function submit() {
+    if (!userId || myRating === 0) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("preset_reviews")
+      .upsert({ preset_id: presetId, author_id: userId, rating: myRating, content: myContent.trim() || null }, { onConflict: "preset_id,author_id" });
+    setSaving(false);
+    if (!error) {
+      onChanged();
+      onClose();
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="glass max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Отзывы</h2>
+          <button onClick={onClose} aria-label="Закрыть"><X className="h-5 w-5" /></button>
+        </div>
+
+        {userId && (
+          <div className="mt-4 rounded-xl border border-border bg-secondary/30 p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Твой отзыв</p>
+            <StarPicker value={myRating} onChange={setMyRating} />
+            <textarea
+              value={myContent}
+              onChange={(e) => setMyContent(e.target.value)}
+              placeholder="Что понравилось или нет? (необязательно)"
+              rows={2}
+              maxLength={500}
+              className="mt-2 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+            <button
+              onClick={submit}
+              disabled={saving || myRating === 0}
+              className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Сохранить
+            </button>
+          </div>
+        )}
+
+        <div className="mt-4 space-y-3">
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Загрузка…</p>
+          ) : reviews.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Пока нет отзывов. Будь первым!</p>
+          ) : (
+            reviews.map((r) => (
+              <div key={r.id} className="border-t border-border/60 pt-3 first:border-t-0 first:pt-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">{r.author?.username ?? "Аноним"}</span>
+                  <StarRating value={r.rating} />
+                </div>
+                {r.content && <p className="mt-1 text-sm text-foreground/80">{r.content}</p>}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }

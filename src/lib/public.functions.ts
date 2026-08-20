@@ -35,10 +35,10 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
       .select("id, username, avatar_url, banner_url, accent_color, display_font, xp, level, verified, created_at, bio, full_name, socials, status_text")
       .ilike("username", input.username)
       .maybeSingle();
-    const empty = { profile: null, error: null as string | null, followerCount: 0, followingCount: 0, certs: [] as Cert[], presets: [] as PublicPreset[], screenshots: [] as PublicScreenshot[], isPremium: false };
+    const empty = { profile: null, error: null as string | null, followerCount: 0, followingCount: 0, certs: [] as Cert[], presets: [] as PublicPreset[], screenshots: [] as PublicScreenshot[], reviews: [] as PublicReview[], isPremium: false };
     if (error) return { ...empty, error: error.message };
     if (!data) return empty;
-    const [followers, following, userCertsRes, allCertsRes, presetsRes, screenshotsRes, premiumRes] = await Promise.all([
+    const [followers, following, userCertsRes, allCertsRes, presetsRes, screenshotsRes, reviewsRes, premiumRes] = await Promise.all([
       s.from("user_follows").select("follower_id", { count: "exact", head: true }).eq("followed_id", data.id),
       s.from("user_follows").select("followed_id", { count: "exact", head: true }).eq("follower_id", data.id),
       // Badges — earned certifications. Both tables are publicly readable
@@ -50,6 +50,7 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
       // is_hidden=false filter — RLS already enforces it, but explicit
       // here too (same belt-and-suspenders convention as getPosts).
       s.from("screenshots").select("id, image_url, caption, created_at").eq("author_id", data.id).eq("is_hidden", false).order("created_at", { ascending: false }).limit(12),
+      s.from("preset_reviews").select("id, preset_id, rating, content, created_at").eq("author_id", data.id).eq("is_hidden", false).order("created_at", { ascending: false }).limit(6),
       // Gates the full-page background perk — a boolean-only RPC (no raw
       // tier/expiry exposed) rather than selecting subscription_tier
       // directly, which has never been safe to expose (see the comment
@@ -63,15 +64,25 @@ export const getProfileByUsername = createServerFn({ method: "GET" })
         return c ? { ...c, awarded_at: uc.awarded_at } : null;
       })
       .filter((c): c is NonNullable<typeof c> => !!c);
+    const reviewedPresetIds = [...new Set((reviewsRes.data ?? []).map((r) => r.preset_id))];
+    const reviewedPresetsRes = reviewedPresetIds.length
+      ? await s.from("presets").select("id, title, daw").in("id", reviewedPresetIds)
+      : { data: [] as { id: string; title: string; daw: string }[] };
+    const presetTitleMap = new Map((reviewedPresetsRes.data ?? []).map((p) => [p.id, p]));
+    const reviews: PublicReview[] = (reviewsRes.data ?? []).map((r) => ({
+      id: r.id, rating: r.rating, content: r.content, createdAt: r.created_at,
+      preset: presetTitleMap.get(r.preset_id) ?? null,
+    }));
     return {
       profile: data, error: null, followerCount: followers.count ?? 0, followingCount: following.count ?? 0,
-      certs, presets: presetsRes.data ?? [], screenshots: screenshotsRes.data ?? [], isPremium: premiumRes.data === true,
+      certs, presets: presetsRes.data ?? [], screenshots: screenshotsRes.data ?? [], reviews, isPremium: premiumRes.data === true,
     };
   });
 
 type Cert = { id: string; slug: string; name: string; color: string; icon: string | null; awarded_at?: string };
 type PublicPreset = { id: string; title: string; daw: string; genre: string | null; downloads: number; is_premium: boolean };
 type PublicScreenshot = { id: string; image_url: string; caption: string | null; created_at: string };
+type PublicReview = { id: string; rating: number; content: string | null; createdAt: string; preset: { id: string; title: string; daw: string } | null };
 
 export const searchUsernames = createServerFn({ method: "GET" })
   .validator((input: { q: string }) => input)
@@ -129,12 +140,33 @@ export const getPresets = createServerFn({ method: "GET" }).handler(async () => 
   const s = pub();
   const presetsRes = await s.from("presets").select("id, author_id, title, description, daw, genre, file_url, downloads, created_at, is_premium").order("created_at", { ascending: false }).limit(100);
   if (presetsRes.error) return { presets: [], error: presetsRes.error.message };
-  const authorIds = [...new Set((presetsRes.data ?? []).map((p) => p.author_id))];
-  const profilesRes = authorIds.length
-    ? await s.from("profiles").select("id, username, avatar_url").in("id", authorIds)
-    : { data: [] as { id: string; username: string; avatar_url: string | null }[] };
+  const presetIds = (presetsRes.data ?? []).map((p) => p.id);
+  const [profilesRes, reviewsRes] = await Promise.all([
+    (async () => {
+      const authorIds = [...new Set((presetsRes.data ?? []).map((p) => p.author_id))];
+      return authorIds.length
+        ? s.from("profiles").select("id, username, avatar_url").in("id", authorIds)
+        : { data: [] as { id: string; username: string; avatar_url: string | null }[] };
+    })(),
+    presetIds.length
+      ? s.from("preset_reviews").select("preset_id, rating").eq("is_hidden", false).in("preset_id", presetIds)
+      : Promise.resolve({ data: [] as { preset_id: string; rating: number }[] }),
+  ]);
   const map = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
-  return { presets: (presetsRes.data ?? []).map((p) => ({ ...p, author: map.get(p.author_id) ?? null })), error: null };
+  const ratingsByPreset = new Map<string, number[]>();
+  for (const r of reviewsRes.data ?? []) {
+    const arr = ratingsByPreset.get(r.preset_id) ?? [];
+    arr.push(r.rating);
+    ratingsByPreset.set(r.preset_id, arr);
+  }
+  return {
+    presets: (presetsRes.data ?? []).map((p) => {
+      const ratings = ratingsByPreset.get(p.id) ?? [];
+      const avgRating = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
+      return { ...p, author: map.get(p.author_id) ?? null, avgRating, reviewCount: ratings.length };
+    }),
+    error: null,
+  };
 });
 
 // Merch shop — catalog only (see admin.merch.tsx / shop.tsx). RLS already

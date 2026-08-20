@@ -24,6 +24,7 @@ import { ACCENT_COLORS, DISPLAY_FONTS, accentHex, fontFamily, tenureLabel } from
 import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
 import { PremiumBadge } from "@/components/premium-paywall";
 import { ScreenshotGallery, type GalleryScreenshot } from "@/components/screenshot-gallery";
+import { StarRating } from "@/components/star-rating";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -111,6 +112,7 @@ function ProfilePage() {
   const [presetsCount, setPresetsCount] = useState(0);
   const [myPresets, setMyPresets] = useState<Tables<"presets">[]>([]);
   const [screenshots, setScreenshots] = useState<GalleryScreenshot[]>([]);
+  const [myReviews, setMyReviews] = useState<{ id: string; rating: number; content: string | null; preset: { id: string; title: string; daw: string } | null }[]>([]);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const [roles, setRoles] = useState<string[]>([]);
   const [staffPerms, setStaffPerms] = useState<{ can_manage_courses: boolean; can_view_finances: boolean } | null>(null);
@@ -237,6 +239,13 @@ function ProfilePage() {
           })
           .filter((b): b is ProfileBadge => !!b),
       );
+      const { data: reviewRows } = await supabase.from("preset_reviews").select("id, preset_id, rating, content").eq("author_id", user.id).order("created_at", { ascending: false }).limit(6);
+      if (reviewRows?.length) {
+        const presetIds = [...new Set(reviewRows.map((r) => r.preset_id))];
+        const { data: presetsForReviews } = await supabase.from("presets").select("id, title, daw").in("id", presetIds);
+        const presetMap = new Map((presetsForReviews ?? []).map((pr2) => [pr2.id, pr2]));
+        setMyReviews(reviewRows.map((r) => ({ id: r.id, rating: r.rating, content: r.content, preset: presetMap.get(r.preset_id) ?? null })));
+      }
       loadWall();
     }
     load();
@@ -786,6 +795,23 @@ function ProfilePage() {
                 </div>
                 <p className="mt-2 truncate text-sm font-semibold">{preset.title}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{preset.genre ?? "Без жанра"} · {preset.downloads} ⬇</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {myReviews.length > 0 && (
+        <div className="glass mt-4 rounded-2xl p-5 md:p-6">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Обзоры · {myReviews.length}</p>
+          <div className="mt-3 space-y-3">
+            {myReviews.map((r) => (
+              <div key={r.id} className="border-t border-border/60 pt-3 first:border-t-0 first:pt-0">
+                <div className="flex items-center justify-between gap-2">
+                  <Link to="/presets" className="truncate text-sm font-semibold text-mint hover:underline">{r.preset?.title ?? "Пресет"}</Link>
+                  <StarRating value={r.rating} />
+                </div>
+                {r.content && <p className="mt-1 text-sm text-foreground/80">{r.content}</p>}
               </div>
             ))}
           </div>

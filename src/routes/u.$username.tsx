@@ -14,6 +14,7 @@ import { accentHex, fontFamily, tenureLabel } from "@/lib/profile-customization"
 import { CertBadgeRow, type ProfileBadge } from "@/components/cert-badges";
 import { PremiumBadge } from "@/components/premium-paywall";
 import { ScreenshotGallery } from "@/components/screenshot-gallery";
+import { StarRating } from "@/components/star-rating";
 
 const profileQuery = (username: string) =>
   queryOptions({
@@ -247,6 +248,23 @@ function PublicProfilePage() {
           <div className="glass mt-5 rounded-2xl p-5">
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Скриншоты · {data.screenshots.length}</p>
             <ScreenshotGallery screenshots={data.screenshots} />
+          </div>
+        )}
+
+        {data.reviews.length > 0 && (
+          <div className="glass mt-5 rounded-2xl p-5">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Обзоры · {data.reviews.length}</p>
+            <div className="space-y-3">
+              {data.reviews.map((r) => (
+                <div key={r.id} className="border-t border-border/60 pt-3 first:border-t-0 first:pt-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <Link to="/presets" className="truncate text-sm font-semibold text-mint hover:underline">{r.preset?.title ?? "Пресет"}</Link>
+                    <StarRating value={r.rating} />
+                  </div>
+                  {r.content && <p className="mt-1 text-sm text-foreground/80">{r.content}</p>}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

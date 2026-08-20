@@ -875,6 +875,47 @@ export type Database = {
         }
         Relationships: []
       }
+      preset_reviews: {
+        Row: {
+          author_id: string
+          content: string | null
+          created_at: string
+          id: string
+          is_hidden: boolean
+          preset_id: string
+          rating: number
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_hidden?: boolean
+          preset_id: string
+          rating: number
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_hidden?: boolean
+          preset_id?: string
+          rating?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "preset_reviews_preset_id_fkey"
+            columns: ["preset_id"]
+            isOneToOne: false
+            referencedRelation: "presets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       presets: {
         Row: {
           author_id: string
